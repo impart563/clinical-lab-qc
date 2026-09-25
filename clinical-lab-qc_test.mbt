@@ -413,6 +413,11 @@ test "CSV parsing preserves quotes, exact decimal precision, empty values, and d
     csv.replace(old="1.25", new="1.250"),
   )
   assert_true(bad_precision.issues.length() > 0)
+  assert_true(
+    bad_precision.issues[0].message.contains(
+      "line 2, field 'value' (column 10)",
+    ),
+  )
   let i64_min = parse_qc_csv(
     program,
     csv.replace(old="1.25", new="-92233720368547758.08"),
@@ -431,4 +436,19 @@ test "CSV parsing preserves quotes, exact decimal precision, empty values, and d
     csv.replace(old="\"run \"\"one\"\"\"", new="\"unfinished"),
   )
   assert_true(malformed.issues.length() > 0)
+  assert_true(malformed.issues[0].message.contains("line "))
+  assert_true(malformed.issues[0].message.contains("column "))
+}
+
+///|
+test "CSV diagnostics use physical positions across quoted multiline CRLF fields" {
+  let program = test_program_one(10000L, 100L, 2)
+  let csv = "epoch_id,reagent_lot,control_lot,calibration_id,program_version,run_id,sequence,timestamp,control_level_id,value\r\n" +
+    "e,r,c,k,v,first,1,\"time\r\ncontinued\",L1,100.00\r\n" +
+    "e,r,c,k,v,second,2,time,L1,100.001\r\n"
+  let parsed = parse_qc_csv(program, csv)
+  assert_eq(parsed.issues.length(), 1)
+  assert_true(
+    parsed.issues[0].message.contains("line 4, field 'value' (column 10)"),
+  )
 }

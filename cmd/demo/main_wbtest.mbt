@@ -7,8 +7,35 @@ test "CLI defaults to the stable Markdown scenario" {
       assert_true(options.input_path is None)
       assert_true(options.program_path is None)
       assert_true(!options.check_program)
+      assert_true(!options.check_input)
     }
     Err(_) => fail("default CLI options should parse")
+  }
+}
+
+///|
+test "CLI supports text and JSON CSV preflight with a selected program" {
+  match
+    parse_cli_args([
+      "--check-input", "--input", "samples.csv", "--format", "json",
+    ]) {
+    Ok(options) => {
+      assert_true(options.check_input)
+      assert_true(options.input_path == Some("samples.csv"))
+      assert_true(options.format == "json")
+      assert_true(!options.check_program)
+    }
+    Err(_) => fail("CSV preflight should accept JSON output")
+  }
+  match
+    parse_cli_args([
+      "--program", "assay.json", "--check-input", "--input", "samples.csv",
+    ]) {
+    Ok(options) => {
+      assert_true(options.check_input)
+      assert_true(options.program_path == Some("assay.json"))
+    }
+    Err(_) => fail("CSV preflight should accept a custom assay program")
   }
 }
 
@@ -73,6 +100,19 @@ test "CLI rejects unknown arguments formats and conflicting inputs" {
     parse_cli_args(["--program", "examples/demo-program.json"]) is Err(_),
   )
   assert_true(parse_cli_args(["--check-program"]) is Err(_))
+  assert_true(parse_cli_args(["--check-input"]) is Err(_))
+  assert_true(
+    parse_cli_args([
+      "--check-input", "--input", "samples.csv", "--format", "csv",
+    ])
+    is Err(_),
+  )
+  assert_true(
+    parse_cli_args([
+      "--check-input", "--input", "samples.csv", "--scenario", "stable",
+    ])
+    is Err(_),
+  )
   assert_true(
     parse_cli_args([
       "--input", "examples/synthetic-iqc.csv", "--scenario", "stable",

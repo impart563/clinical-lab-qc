@@ -1,9 +1,11 @@
 import {
   "moonbitlang/core/argparse",
+  "moonbitlang/core/json",
   "moonbitlang/async",
   "moonbitlang/async/fs",
   "impart563/clinical-lab-qc" @lib,
   "impart563/clinical-lab-qc/cmd/demo/scenarios",
+  "impart563/clinical-lab-qc/evidence",
   "moonbitlang/core/env",
 }
 

@@ -172,6 +172,98 @@ def verify_scenario(name: str) -> None:
         require("Rule signals and evidence" in html_report, "gradual-drift: HTML evidence details missing")
 
 
+def verify_input_preflight() -> None:
+    print("Verify CSV preflight")
+    source = (ROOT / "examples" / "synthetic-iqc.csv").read_text(encoding="utf-8")
+    program = str(ROOT / "examples" / "demo-program.json")
+
+    def check_format(
+        content: str,
+        output_format: str,
+        *,
+        expected: int = 0,
+    ) -> subprocess.CompletedProcess[str]:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".csv", delete=False
+        ) as csv_file:
+            csv_file.write(content)
+            csv_path = Path(csv_file.name)
+        try:
+            return command(
+                [
+                    "moon",
+                    "run",
+                    "--target",
+                    "native",
+                    "cmd/demo",
+                    "--",
+                    "--check-input",
+                    "--input",
+                    str(csv_path),
+                    "--program",
+                    program,
+                    "--format",
+                    output_format,
+                ],
+                expected=expected,
+            )
+        finally:
+            csv_path.unlink(missing_ok=True)
+
+    valid = check_format(source, "text")
+    require("Input preflight: valid" in valid.stdout, "valid CSV preflight failed")
+    require("Input runs: 3" in valid.stdout, "preflight run count changed")
+    require("QC rule signals are not used" in valid.stdout, "preflight scope was not explained")
+
+    valid_json = command(
+        [
+            "moon",
+            "run",
+            "--target",
+            "native",
+            "cmd/demo",
+            "--",
+            "--check-input",
+            "--input",
+            str(ROOT / "examples" / "synthetic-iqc.csv"),
+            "--program",
+            program,
+            "--format",
+            "json",
+        ]
+    )
+    json_report = json.loads(valid_json.stdout)
+    require(json_report["valid"] is True, "valid JSON preflight changed")
+    require(json_report["input_runs"] == 3, "JSON preflight run count changed")
+    require(json_report["errors"] == [], "valid preflight reported errors")
+
+    missing_control = "\n".join(
+        line for line in source.splitlines() if ",L2," not in line
+    ) + "\n"
+    incomplete = json.loads(check_format(missing_control, "json").stdout)
+    require(incomplete["valid"] is True, "missing observations should not be parse errors")
+    require(incomplete["warning_count"] == 3, "missing required controls should be warnings")
+
+    bad_precision = source.replace(",L1,100\n", ",L1,100.1\n", 1)
+    invalid_precision = check_format(bad_precision, "text", expected=2)
+    require("Input preflight: invalid" in invalid_precision.stdout, "invalid precision passed preflight")
+    require("line 2, field 'value' (column 10)" in invalid_precision.stdout, "CSV location was missing")
+
+    bad_sequence = source.replace("sample-2,2,", "sample-2,1,")
+    invalid_track = json.loads(
+        check_format(bad_sequence, "json", expected=2).stdout
+    )
+    require(invalid_track["valid"] is False, "non-increasing sequence passed preflight")
+    require(
+        any(issue["code"] == "non_increasing_sequence" for issue in invalid_track["errors"]),
+        f"track sequence diagnostic was missing: {invalid_track['errors']}",
+    )
+
+    qc_signal_only = source.replace(",L1,100\n", ",L1,1000\n", 1)
+    signal_report = json.loads(check_format(qc_signal_only, "json").stdout)
+    require(signal_report["valid"] is True, "QC rule signals must not invalidate file structure")
+
+
 def main() -> int:
     version_lines = command(["moon", "version"]).stdout.splitlines()
     require(bool(version_lines), "MoonBit toolchain version was not reported")
@@ -248,6 +340,8 @@ def main() -> int:
         require("CSV input has 1 issue" in bad_csv.stdout, "malformed CSV error was not clear")
     finally:
         invalid_csv_path.unlink(missing_ok=True)
+
+    verify_input_preflight()
 
     print("Build Moon package archive")
     moon("package")

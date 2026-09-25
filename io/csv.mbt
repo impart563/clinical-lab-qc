@@ -7,7 +7,10 @@ pub(all) struct CsvParseResult {
 ///|
 priv struct CsvTable {
   rows : Array[Array[String]]
+  row_lines : Array[Int]
   error : String?
+  error_line : Int?
+  error_column : Int?
 }
 
 ///|
@@ -31,21 +34,30 @@ priv enum ScaledParse {
 fn parse_csv_table(text : String) -> CsvTable {
   let chars = text.to_array()
   let rows : Array[Array[String]] = []
+  let row_lines : Array[Int] = []
   let mut fields : Array[String] = []
   let field = StringBuilder()
   let mut quoted = false
   let mut after_quote = false
   let mut error : String? = None
+  let mut error_line : Int? = None
+  let mut error_column : Int? = None
   let mut saw_character = false
+  let mut line = 1
+  let mut column = 1
+  let mut row_start_line = 1
+  let mut previous_cr = false
   let mut i = 0
   while i < chars.length() {
     let ch = chars[i]
+    let mut skipped_character = false
     saw_character = true
     if quoted {
       if ch == '"' {
         if i + 1 < chars.length() && chars[i + 1] == '"' {
           field.write_char('"')
           i = i + 1
+          skipped_character = true
         } else {
           quoted = false
           after_quote = true
@@ -63,21 +75,28 @@ fn parse_csv_table(text : String) -> CsvTable {
         field.reset()
         if !(fields.length() == 1 && fields[0].is_empty()) {
           rows.push(fields)
+          row_lines.push(row_start_line)
         }
         fields = []
         after_quote = false
         saw_character = false
+        row_start_line = line + 1
         if ch == '\r' && i + 1 < chars.length() && chars[i + 1] == '\n' {
           i = i + 1
+          skipped_character = true
         }
-      } else {
+      } else if error is None {
         error = Some("unexpected character after a quoted CSV field")
+        error_line = Some(line)
+        error_column = Some(column)
       }
     } else if ch == '"' {
       if field.is_empty() {
         quoted = true
-      } else {
+      } else if error is None {
         error = Some("quote inside an unquoted CSV field")
+        error_line = Some(line)
+        error_column = Some(column)
       }
     } else if ch == ',' {
       fields.push(field.to_string())
@@ -87,27 +106,64 @@ fn parse_csv_table(text : String) -> CsvTable {
       field.reset()
       if !(fields.length() == 1 && fields[0].is_empty()) {
         rows.push(fields)
+        row_lines.push(row_start_line)
       }
       fields = []
       saw_character = false
+      row_start_line = line + 1
       if ch == '\r' && i + 1 < chars.length() && chars[i + 1] == '\n' {
         i = i + 1
+        skipped_character = true
       }
     } else {
       field.write_char(ch)
+    }
+    if ch == '\r' {
+      line = line + 1
+      column = 1
+      previous_cr = true
+    } else if ch == '\n' {
+      if previous_cr {
+        column = 1
+        previous_cr = false
+      } else {
+        line = line + 1
+        column = 1
+      }
+    } else {
+      previous_cr = false
+      column = column + (if skipped_character { 2 } else { 1 })
     }
     i = i + 1
   }
   if error is None && quoted {
     error = Some("unterminated quoted CSV field")
+    error_line = Some(line)
+    error_column = Some(column)
   }
   if error is None && saw_character {
     fields.push(field.to_string())
     if !(fields.length() == 1 && fields[0].is_empty()) {
       rows.push(fields)
+      row_lines.push(row_start_line)
     }
   }
-  { rows, error }
+  { rows, row_lines, error, error_line, error_column }
+}
+
+///|
+fn csv_line_location(line : Int) -> String {
+  "line " + line.to_string()
+}
+
+///|
+fn csv_field_location(line : Int, field : String, column : Int) -> String {
+  csv_line_location(line) +
+  ", field '" +
+  field +
+  "' (column " +
+  column.to_string() +
+  ")"
 }
 
 ///|
@@ -234,7 +290,12 @@ pub fn parse_qc_csv(
   let issues : Array[@evidence.InputIssue] = []
   match table.error {
     Some(message) => {
-      issues.push(csv_issue(@evidence.CsvMalformed, None, message))
+      let location = match (table.error_line, table.error_column) {
+        (Some(line), Some(column)) =>
+          "line " + line.to_string() + ", column " + column.to_string() + ": "
+        _ => "CSV input: "
+      }
+      issues.push(csv_issue(@evidence.CsvMalformed, None, location + message))
       return { runs: [], issues }
     }
     None => ()
@@ -256,12 +317,15 @@ pub fn parse_qc_csv(
   let records : Array[CsvRecord] = []
   for row_index in 1..<table.rows.length() {
     let row = table.rows[row_index]
+    let physical_line = table.row_lines[row_index]
     if row.length() != expected.length() {
       issues.push(
         csv_issue(
           @evidence.CsvMalformed,
           None,
-          "row " + row_index.to_string() + " has the wrong number of columns",
+          csv_line_location(physical_line) +
+          ": expected 10 columns but found " +
+          row.length().to_string(),
         ),
       )
     } else {
@@ -280,7 +344,8 @@ pub fn parse_qc_csv(
               csv_issue(
                 @evidence.CsvMalformed,
                 Some(run_id),
-                "run sequence must be positive",
+                csv_field_location(physical_line, "sequence", 7) +
+                ": run sequence must be positive",
               ),
             )
           } else if !epoch.is_valid() ||
@@ -290,7 +355,8 @@ pub fn parse_qc_csv(
               csv_issue(
                 @evidence.CsvMalformed,
                 Some(run_id),
-                "epoch metadata, run id, and timestamp must not be empty",
+                csv_line_location(physical_line) +
+                ": epoch metadata, run id, and timestamp must not be empty",
               ),
             )
           } else {
@@ -318,7 +384,9 @@ pub fn parse_qc_csv(
                   csv_issue(
                     @evidence.CsvPrecision,
                     Some(run_id),
-                    "row " + row_index.to_string() + ": " + message,
+                    csv_field_location(physical_line, "value", 10) +
+                    ": " +
+                    message,
                   ),
                 )
             }
@@ -328,7 +396,8 @@ pub fn parse_qc_csv(
             csv_issue(
               @evidence.CsvMalformed,
               Some(run_id),
-              "run sequence is required",
+              csv_field_location(physical_line, "sequence", 7) +
+              ": run sequence is required",
             ),
           )
         Invalid(message) =>
@@ -336,7 +405,7 @@ pub fn parse_qc_csv(
             csv_issue(
               @evidence.CsvMalformed,
               Some(run_id),
-              "row " + row_index.to_string() + ": " + message,
+              csv_field_location(physical_line, "sequence", 7) + ": " + message,
             ),
           )
       }
@@ -359,7 +428,8 @@ pub fn parse_qc_csv(
           csv_issue(
             @evidence.CsvMalformed,
             Some(first.run_id),
-            "metadata must be identical across rows for one run",
+            csv_line_location(table.row_lines[next_index]) +
+            ": metadata must be identical across rows for one run",
           ),
         )
       } else if contains_level(seen_levels, record.control_level_id) {
@@ -367,7 +437,13 @@ pub fn parse_qc_csv(
           csv_issue(
             @evidence.DuplicateControlPoint,
             Some(first.run_id),
-            "duplicate row for control level " + record.control_level_id,
+            csv_field_location(
+              table.row_lines[next_index],
+              "control_level_id",
+              9,
+            ) +
+            ": duplicate row for control level " +
+            record.control_level_id,
           ),
         )
       } else {

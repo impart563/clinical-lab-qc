@@ -17,6 +17,8 @@ moon run --target native cmd/demo -- --scenario gradual-drift --format svg > gra
 moon run --target native cmd/demo -- --scenario gradual-drift --format html > gradual-drift.html
 moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format json
 moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format csv
+moon run --target native cmd/demo -- --check-input --input examples/synthetic-iqc.csv
+moon run --target native cmd/demo -- --check-input --input examples/synthetic-iqc.csv --program examples/demo-program.json --format json
 moon run --target native cmd/demo -- --program examples/demo-program.json --check-program
 moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format json
 moon run --target native examples/quickstart
@@ -30,6 +32,7 @@ The default Markdown output starts with track totals and then lists each run, tr
 - `gradual-drift` shows consecutive-run signals and the points that support them.
 - `--input` replays a long-form CSV using the demo assay program. CSV files with parse issues fail with a nonzero process status.
 - `--program` loads a custom assay profile from versioned JSON; combine it with `--input` to replay the CSV using that profile. `--check-program` validates a profile without replaying data.
+- `--check-input` validates CSV parsing and run/epoch track integrity without producing a QC assessment report. It accepts an optional `--program`; the default text report or `--format json` returns diagnostics. Syntax and track errors fail with exit code 2; missing required controls are reported as warnings. QC rule signals do not decide input validity.
 - `--format csv` exports the audit details as a result table; `--format json` includes status, rule-hit, and epoch-run summaries.
 - `--format html` writes a single offline review report with the assay configuration, status and rule summaries, epoch metadata, an embedded Levey–Jennings SVG, and expandable per-run observations and evidence. It has no scripts or external assets; open the saved `.html` file in a browser.
 - `examples/quickstart` is a small downstream-style program that constructs the public API types, replays data, and renders Markdown and SVG through the root package.
@@ -64,7 +67,7 @@ Rule thresholds are strict: equality does not trigger. `2_2s` and `4_1s` require
 epoch_id,reagent_lot,control_lot,calibration_id,program_version,run_id,sequence,timestamp,control_level_id,value
 ```
 
-Epoch and run metadata repeat on each row for that run. A blank `value` represents a missing observation, not zero. Numeric values must use a plain decimal with no more fractional digits than the program precision; the parser never rounds. Quoted fields and escaped quotes follow CSV quoting rules. The parser preserves input order and reports malformed rows, duplicate control rows, and invalid decimal precision.
+Epoch and run metadata repeat on each row for that run. A blank `value` represents a missing observation, not zero. Numeric values must use a plain decimal with no more fractional digits than the program precision; the parser never rounds. Quoted fields and escaped quotes follow CSV quoting rules. The parser preserves input order and reports malformed rows, duplicate control rows, and invalid decimal precision with physical line and field positions when available. Quoted multiline fields retain their physical line accounting.
 
 ## Checks
 
