@@ -148,7 +148,6 @@ def verify_scenario(name: str) -> None:
 
 
 def main() -> int:
-    print(f"Repository: {ROOT}")
     version_lines = command(["moon", "version"]).stdout.splitlines()
     require(bool(version_lines), "MoonBit toolchain version was not reported")
     print(f"MoonBit toolchain: {version_lines[0]}")
@@ -156,7 +155,10 @@ def main() -> int:
     print("Run MoonBit checks, build, tests, quickstart, and package")
     moon("check", "--deny-warn", "--target", "all")
     moon("build", "--target", "native", "cmd/demo")
-    moon("test", "--deny-warn", "--target", "all")
+    test_output = moon("test", "--deny-warn", "--target", "all")
+    for line in test_output.splitlines():
+        if line.startswith("Total tests:"):
+            print(line)
     moon("run", "--target", "native", "examples/quickstart")
 
     for scenario in ("stable", "step-shift", "gradual-drift"):

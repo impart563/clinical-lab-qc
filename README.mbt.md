@@ -19,6 +19,7 @@ moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format
 moon run --target native cmd/demo -- --program examples/demo-program.json --check-program
 moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format json
 moon run --target native examples/quickstart
+python scripts/acceptance.py
 ```
 
 The default Markdown output starts with track totals and then lists each run, triggered rule, evidence point, comparison distance, and input issue. JSON output is a deterministic `schema_version: 1` audit envelope with the program, original runs and observations, epoch snapshots, assessments, issues, and summary counts. CSV output is a detail table with typed `assessment`, `observation`, `evidence`, `input_issue`, and `track_issue` rows; scaled measurement columns remain integer strings and include their precision.
@@ -29,7 +30,7 @@ The default Markdown output starts with track totals and then lists each run, tr
 - `--input` replays a long-form CSV using the demo assay program. CSV files with parse issues fail with a nonzero process status.
 - `--program` loads a custom assay profile from versioned JSON; combine it with `--input` to replay the CSV using that profile. `--check-program` validates a profile without replaying data.
 - `--format csv` exports the audit details as a result table; `--format json` includes status, rule-hit, and epoch-run summaries.
-- `examples/quickstart` is a small downstream-style program that constructs the public API types and calls `replay_track`.
+- `examples/quickstart` is a small downstream-style program that constructs the public API types, replays data, and renders Markdown and SVG through the root package.
 
 Assay profile JSON uses `schema_version: 1`; unknown fields are rejected. Control `mean` and `standard_deviation` values are decimal strings (for example, `"100.25"`) so they are converted exactly at the declared precision. Rule names are `1_2s`, `1_3s`, `2_2s`, `R_4s`, `4_1s`, and `10x`; dispositions are `disabled`, `warning`, or `requires_review`. Rules omitted from the `rules` array keep their built-in default dispositions. See [the example profile](examples/demo-program.json). The public parser is `parse_assay_program_json`.
 
@@ -40,6 +41,8 @@ The root package exports `validate_program`, `parse_assay_program_json`, `evalua
 The compiled [quickstart example](examples/quickstart/main.mbt) shows the complete API path: configure an assay and QC epoch, construct ordered runs, replay them, and render a report. Exact rule windows and implementation limits are documented in [Rule semantics](docs/rule-semantics.md).
 
 `render_levey_jennings_svg(program, runs, trajectory)` returns a standalone offline SVG chart with one panel per control level, mean and ±1/2/3 SD lines, run-sequence labels, and hover details for observations. Missing values and epoch changes break the plotted line; epoch changes are marked with a vertical boundary. Rule evidence uses a distinct marker for warning, review-required, or disabled dispositions.
+
+The reviewer-facing [project one-pager](docs/project-one-pager.md), [acceptance evidence map](docs/acceptance.md), [design decisions](docs/design-decisions.md), and [changelog](CHANGELOG.md) explain the project scope, development history, and how to reproduce its main results.
 
 An `AssayProgram` declares an assay, measurement unit, decimal precision, control levels with target means and positive standard deviations, required levels, and rule policies. Values are signed `Int64` scaled integers: with precision `2`, `100.25` is represented as `10025`. Comparisons never convert to floating point. Arithmetic overflow is returned as an input issue.
 
@@ -68,9 +71,12 @@ moon check --target all
 moon build --target native
 moon test --target all
 moon package
+python scripts/acceptance.py
 ```
 
-The CI also denies compiler warnings, checks custom-program preflight and replay, verifies the audit JSON/CSV and SVG outputs, runs the quickstart, and checks the package artifact. The tests cover strict threshold boundaries, all six rules, stage isolation, missing-value window resets, input validation, overflow reporting, CSV parsing and escaping, stable versioned reports and charts, chart gaps and epoch markers, and all demo scenarios.
+`python scripts/acceptance.py` runs the same all-target checks, build, tests, public quickstart, deterministic scenario checks, cross-format consistency checks, CLI error cases, and package build locally. CI invokes this script and records the installed MoonBit CLI version in its log.
+
+The tests cover strict threshold boundaries, all six rules, stage isolation, missing-value window resets, input validation, overflow reporting, CSV parsing and escaping, stable versioned reports and charts, chart gaps and epoch markers, exact demo outcomes, and all public report renderers.
 
 ## License
 
