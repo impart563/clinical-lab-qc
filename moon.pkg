@@ -1,0 +1,8 @@
+import {
+  "impart563/clinical-lab-qc/assay",
+  "impart563/clinical-lab-qc/epoch",
+  "impart563/clinical-lab-qc/run",
+  "impart563/clinical-lab-qc/evidence",
+  "impart563/clinical-lab-qc/replay",
+  "impart563/clinical-lab-qc/io",
+}

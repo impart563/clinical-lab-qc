@@ -1,0 +1,30 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "impart563/clinical-lab-qc/run"
+
+import {
+  "impart563/clinical-lab-qc/epoch",
+  "moonbitlang/core/debug",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) struct ControlPoint {
+  control_level_id : String
+  value : Int64
+  precision : Int
+} derive(@debug.Debug)
+
+pub(all) struct QCRun {
+  run_id : String
+  epoch : @epoch.QCEpoch
+  sequence : Int64
+  timestamp : String
+  observations : Array[ControlPoint]
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits

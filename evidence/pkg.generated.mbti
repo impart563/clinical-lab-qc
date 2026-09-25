@@ -1,0 +1,96 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "impart563/clinical-lab-qc/evidence"
+
+import {
+  "impart563/clinical-lab-qc/assay",
+  "moonbitlang/core/debug",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) enum AssessmentStatus {
+  InControl
+  Warning
+  RequiresReview
+  Incomplete
+} derive(Eq, @debug.Debug)
+pub fn AssessmentStatus::name(Self) -> String
+
+pub(all) enum Direction {
+  Above
+  Below
+  SameSide
+} derive(Eq, @debug.Debug)
+
+pub(all) struct EvidencePoint {
+  run_id : String
+  epoch_id : String
+  sequence : Int64
+  timestamp : String
+  control_level_id : String
+  value : Int64
+  precision : Int
+  unit : String
+  mean : Int64
+  standard_deviation : Int64
+  threshold : Int64
+  direction : Direction
+} derive(@debug.Debug)
+
+pub(all) struct InputIssue {
+  code : InputIssueCode
+  run_id : String?
+  message : String
+} derive(@debug.Debug)
+
+pub(all) enum InputIssueCode {
+  InvalidProgram
+  MissingRequiredControl
+  UnknownControlLevel
+  DuplicateControlPoint
+  PrecisionMismatch
+  InvalidEpoch
+  InvalidRunId
+  EpochSnapshotMismatch
+  RepeatedEpoch
+  DuplicateRunId
+  NonIncreasingSequence
+  ArithmeticOverflow
+  CsvMalformed
+  CsvHeader
+  CsvPrecision
+} derive(Eq, @debug.Debug)
+pub fn InputIssueCode::name(Self) -> String
+
+pub(all) struct RuleHit {
+  rule : @assay.Rule
+  scope : RuleScope
+  evidence : Array[EvidencePoint]
+  reason : String
+} derive(@debug.Debug)
+
+pub(all) enum RuleScope {
+  SingleObservation
+  SameRun
+  ConsecutiveRuns
+} derive(Eq, @debug.Debug)
+
+pub(all) struct RunAssessment {
+  run_id : String
+  sequence : Int64
+  status : AssessmentStatus
+  hits : Array[RuleHit]
+  input_issues : Array[InputIssue]
+} derive(@debug.Debug)
+
+pub(all) struct Trajectory {
+  assessments : Array[RunAssessment]
+  input_issues : Array[InputIssue]
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits

@@ -1,0 +1,88 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "impart563/clinical-lab-qc"
+
+import {
+  "impart563/clinical-lab-qc/assay",
+  "impart563/clinical-lab-qc/epoch",
+  "impart563/clinical-lab-qc/evidence",
+  "impart563/clinical-lab-qc/io",
+  "impart563/clinical-lab-qc/run",
+}
+
+// Values
+pub fn default_rule_policies() -> Array[@assay.RulePolicy]
+
+pub fn disposition_disabled() -> @assay.RuleDisposition
+
+pub fn disposition_requires_review() -> @assay.RuleDisposition
+
+pub fn disposition_warning() -> @assay.RuleDisposition
+
+pub fn evaluate_run(@assay.AssayProgram, @run.QCRun, Array[@run.QCRun]) -> @evidence.RunAssessment
+
+pub fn parse_qc_csv(@assay.AssayProgram, String) -> @io.CsvParseResult
+
+pub fn render_trajectory_json(@evidence.Trajectory) -> String
+
+pub fn render_trajectory_markdown(@evidence.Trajectory) -> String
+
+pub fn replay_track(@assay.AssayProgram, Array[@run.QCRun]) -> @evidence.Trajectory
+
+pub fn rule_10x() -> @assay.Rule
+
+pub fn rule_12s() -> @assay.Rule
+
+pub fn rule_13s() -> @assay.Rule
+
+pub fn rule_22s() -> @assay.Rule
+
+pub fn rule_41s() -> @assay.Rule
+
+pub fn rule_r4s() -> @assay.Rule
+
+pub fn validate_program(@assay.AssayProgram) -> @assay.ValidationResult
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+pub using @assay {type AssayProgram}
+
+pub using @evidence {type AssessmentStatus}
+
+pub using @assay {type ControlLevel}
+
+pub using @run {type ControlPoint}
+
+pub using @io {type CsvParseResult}
+
+pub using @evidence {type Direction}
+
+pub using @evidence {type EvidencePoint}
+
+pub using @evidence {type InputIssue}
+
+pub using @evidence {type InputIssueCode}
+
+pub using @epoch {type QCEpoch}
+
+pub using @run {type QCRun}
+
+pub using @assay {type Rule}
+
+pub using @assay {type RuleDisposition}
+
+pub using @evidence {type RuleHit}
+
+pub using @assay {type RulePolicy}
+
+pub using @evidence {type RuleScope}
+
+pub using @evidence {type RunAssessment}
+
+pub using @evidence {type Trajectory}
+
+pub using @assay {type ValidationResult}
+
+// Traits

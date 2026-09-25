@@ -1,0 +1,20 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "impart563/clinical-lab-qc/cmd/demo/scenarios"
+
+import {
+  "impart563/clinical-lab-qc/assay",
+  "impart563/clinical-lab-qc/run",
+}
+
+// Values
+pub fn build_scenario(String) -> Array[@run.QCRun]?
+
+pub fn demo_program() -> @assay.AssayProgram
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

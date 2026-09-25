@@ -1,0 +1,25 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "impart563/clinical-lab-qc/epoch"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) struct QCEpoch {
+  id : String
+  reagent_lot : String
+  control_lot : String
+  calibration_id : String
+  program_version : String
+} derive(@debug.Debug)
+pub fn QCEpoch::has_same_metadata(Self, Self) -> Bool
+pub fn QCEpoch::is_valid(Self) -> Bool
+
+// Type aliases
+
+// Traits

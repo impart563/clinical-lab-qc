@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  moonbit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - name: Check all targets
+        run: moon check --target all
+      - name: Build native CLI
+        run: moon build --target native cmd/demo
+      - name: Test all targets
+        run: moon test --target all
+      - name: Run deterministic demos
+        run: |
+          moon run --target native cmd/demo -- --scenario stable
+          moon run --target native cmd/demo -- --scenario step-shift
+          moon run --target native cmd/demo -- --scenario gradual-drift

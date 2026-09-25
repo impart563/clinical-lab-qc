@@ -1,0 +1,7 @@
+import {
+  "impart563/clinical-lab-qc" @lib,
+  "impart563/clinical-lab-qc/cmd/demo/scenarios",
+  "moonbitlang/core/env",
+}
+
+pkgtype(kind: "executable")
