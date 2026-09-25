@@ -6,6 +6,7 @@ test "CLI defaults to the stable Markdown scenario" {
       assert_true(options.format == "markdown")
       assert_true(options.input_path is None)
       assert_true(options.program_path is None)
+      assert_true(options.output_path is None)
       assert_true(!options.check_program)
       assert_true(!options.check_input)
     }
@@ -48,6 +49,20 @@ test "CLI accepts a CSV path and JSON format" {
       assert_true(options.format == "json")
     }
     Err(_) => fail("CSV and JSON options should parse")
+  }
+}
+
+///|
+test "CLI accepts a report output path including spaces" {
+  match
+    parse_cli_args([
+      "--scenario", "stable", "--format", "html", "--output", "reports/demo report.html",
+    ]) {
+    Ok(options) => {
+      assert_true(options.output_path == Some("reports/demo report.html"))
+      assert_true(options.format == "html")
+    }
+    Err(_) => fail("report output path should be accepted")
   }
 }
 
@@ -100,6 +115,12 @@ test "CLI rejects unknown arguments formats and conflicting inputs" {
     parse_cli_args(["--program", "examples/demo-program.json"]) is Err(_),
   )
   assert_true(parse_cli_args(["--check-program"]) is Err(_))
+  assert_true(
+    parse_cli_args([
+      "--program", "assay.json", "--check-program", "--output", "valid.txt",
+    ])
+    is Err(_),
+  )
   assert_true(parse_cli_args(["--check-input"]) is Err(_))
   assert_true(
     parse_cli_args([

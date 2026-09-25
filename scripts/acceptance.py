@@ -272,6 +272,55 @@ def verify_input_preflight() -> None:
     require(signal_report["valid"] is True, "QC rule signals must not invalidate file structure")
 
 
+def verify_report_file_output() -> None:
+    print("Verify report file output")
+    with tempfile.TemporaryDirectory(prefix="clinical lab qc ") as directory:
+        for output_format in ("html", "json"):
+            output_path = Path(directory) / f"demo report.{output_format}"
+            output_path.write_text("stale content", encoding="utf-8")
+            args = [
+                "moon",
+                "run",
+                "--target",
+                "native",
+                "cmd/demo",
+                "--",
+                "--scenario",
+                "gradual-drift",
+                "--format",
+                output_format,
+            ]
+            written = command(args + ["--output", str(output_path)])
+            saved = output_path.read_text(encoding="utf-8")
+            direct = command(args).stdout
+            require(
+                written.stdout.strip() == f"Report written to '{output_path}'",
+                f"{output_format}: output confirmation missing",
+            )
+            require(saved != "stale content", f"{output_format}: existing file was not overwritten")
+            require(direct.startswith(saved), f"{output_format}: file and stdout reports disagree")
+
+        missing_parent = Path(directory) / "missing" / "report.html"
+        failed_write = command(
+            [
+                "moon",
+                "run",
+                "--target",
+                "native",
+                "cmd/demo",
+                "--",
+                "--scenario",
+                "stable",
+                "--format",
+                "html",
+                "--output",
+                str(missing_parent),
+            ],
+            expected=2,
+        )
+        require("unable to write report file" in failed_write.stdout, "write failure message was unclear")
+
+
 def main() -> int:
     version_lines = command(["moon", "version"]).stdout.splitlines()
     require(bool(version_lines), "MoonBit toolchain version was not reported")
@@ -350,6 +399,7 @@ def main() -> int:
         invalid_csv_path.unlink(missing_ok=True)
 
     verify_input_preflight()
+    verify_report_file_output()
 
     print("Build Moon package archive")
     moon("package")

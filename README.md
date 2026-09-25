@@ -15,6 +15,7 @@ moon run --target native cmd/demo -- --scenario gradual-drift
 moon run --target native cmd/demo -- --scenario gradual-drift --format json
 moon run --target native cmd/demo -- --scenario gradual-drift --format svg > gradual-drift.svg
 moon run --target native cmd/demo -- --scenario gradual-drift --format html > gradual-drift.html
+moon run --target native cmd/demo -- --scenario gradual-drift --format html --output gradual-drift.html
 moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format json
 moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format csv
 moon run --target native cmd/demo -- --check-input --input examples/synthetic-iqc.csv
@@ -35,6 +36,7 @@ The default Markdown output starts with track totals and then lists each run, tr
 - `--check-input` validates CSV parsing and run/epoch track integrity without producing a QC assessment report. It accepts an optional `--program`; the default text report or `--format json` returns diagnostics. Syntax and track errors fail with exit code 2; missing required controls are reported as warnings. QC rule signals do not decide input validity.
 - `--format csv` exports the audit details as a result table; `--format json` includes status, rule-hit, and epoch-run summaries.
 - `--format html` writes a single offline review report with the assay configuration, status and rule summaries, epoch metadata, an embedded Levey–Jennings SVG, and expandable per-run observations and evidence. Status cards, epoch rows, and evidence rows link directly to matching runs. It has no scripts or external assets; open the saved `.html` file in a browser.
+- `--output <path>` writes the selected report format directly to a file, replacing an existing file; without it, reports go to standard output. The output parent directory must already exist. Write failures return a clear error and nonzero exit status.
 - `examples/quickstart` is a small downstream-style program that constructs the public API types, replays data, and renders Markdown and SVG through the root package.
 
 Assay profile JSON uses `schema_version: 1`; unknown fields are rejected. Control `mean` and `standard_deviation` values are decimal strings (for example, `"100.25"`) so they are converted exactly at the declared precision. Rule names are `1_2s`, `1_3s`, `2_2s`, `R_4s`, `4_1s`, and `10x`; dispositions are `disabled`, `warning`, or `requires_review`. Rules omitted from the `rules` array keep their built-in default dispositions. See [the example profile](examples/demo-program.json). The public parser is `parse_assay_program_json`.

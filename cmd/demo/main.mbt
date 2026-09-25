@@ -4,6 +4,7 @@ priv struct CliOptions {
   format : String
   input_path : String?
   program_path : String?
+  output_path : String?
   check_program : Bool
   check_input : Bool
 }
@@ -49,6 +50,7 @@ fn cli_command() -> @argparse.Command {
         about="demo scenario: stable, step-shift, or gradual-drift",
       ),
       @argparse.OptionArg("input", about="path to a long-form QC CSV file"),
+      @argparse.OptionArg("output", about="write the report to this file path"),
       @argparse.OptionArg(
         "program",
         about="path to a versioned JSON assay program",
@@ -80,6 +82,10 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
     _ => None
   }
   let program_path = match matches.values.get("program") {
+    Some(values) if values.length() == 1 => Some(values[0])
+    _ => None
+  }
+  let output_path = match matches.values.get("output") {
     Some(values) if values.length() == 1 => Some(values[0])
     _ => None
   }
@@ -135,7 +141,21 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
   if check_program && matches.sources.get("scenario") is Some(@argparse.Argv) {
     return Err("--check-program cannot be combined with --scenario")
   }
-  Ok({ scenario, format, input_path, program_path, check_program, check_input })
+  if check_program && output_path is Some(_) {
+    return Err("--output cannot be combined with --check-program")
+  }
+  if output_path is Some(path) && path.trim().is_empty() {
+    return Err("--output requires a non-empty file path")
+  }
+  Ok({
+    scenario,
+    format,
+    input_path,
+    program_path,
+    output_path,
+    check_program,
+    check_input,
+  })
 }
 
 ///|
@@ -291,6 +311,24 @@ fn input_validation_text(validation : InputValidation) -> String {
 }
 
 ///|
+async fn emit_report(output_path : String?, content : String) -> Unit {
+  match output_path {
+    Some(path) => {
+      @fs.write_file(path, content, create_mode=@fs.CreateOrTruncate) catch {
+        _ =>
+          cli_error(
+            "unable to write report file '" +
+            path +
+            "'; check that the parent directory exists and is writable",
+          )
+      }
+      println("Report written to '" + path + "'")
+    }
+    None => println(content)
+  }
+}
+
+///|
 async fn load_program(path : String) -> @lib.AssayProgram {
   let text = @fs.read_file(path).text() catch {
     _ => cli_error("unable to read program configuration '" + path + "'")
@@ -359,7 +397,7 @@ async fn main {
     } else {
       input_validation_text(validation)
     }
-    println(output)
+    emit_report(options.output_path, output)
     if validation.errors.length() > 0 {
       process_exit(2)
     }
@@ -390,7 +428,7 @@ async fn main {
     "html" => @lib.render_audit_html(program, runs, trajectory)
     _ => @lib.render_audit_markdown(program, runs, trajectory)
   }
-  println(output)
+  emit_report(options.output_path, output)
   if has_fatal_trajectory_issue(trajectory) {
     cli_error("replay encountered invalid QC input; see the report above")
   }
