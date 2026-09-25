@@ -8,6 +8,17 @@ priv struct RuleHitCount {
 priv struct EpochRunCount {
   epoch : @epoch.QCEpoch
   count : Int
+  in_control : Int
+  warning : Int
+  requires_review : Int
+  incomplete : Int
+}
+
+///|
+priv struct ControlRuleHitCount {
+  control_level_id : String
+  rule : @assay.Rule
+  count : Int
 }
 
 ///|
@@ -21,6 +32,7 @@ priv struct AuditSummary {
   total_rule_hits : Int
   rule_hits : Array[RuleHitCount]
   epoch_runs : Array[EpochRunCount]
+  control_rule_hits : Array[ControlRuleHitCount]
   track_issues : Int
 }
 
@@ -76,7 +88,18 @@ fn audit_summary(
     }
   }
   let epochs : Array[EpochRunCount] = []
-  for run in runs {
+  for run_index, run in runs {
+    let (run_in_control, run_warning, run_requires_review, run_incomplete) = match
+      trajectory.assessments.get(run_index) {
+      Some(assessment) =>
+        match assessment.status {
+          @evidence.InControl => (1, 0, 0, 0)
+          @evidence.Warning => (0, 1, 0, 0)
+          @evidence.RequiresReview => (0, 0, 1, 0)
+          @evidence.Incomplete => (0, 0, 0, 1)
+        }
+      None => (0, 0, 0, 0)
+    }
     let mut match_index : Int? = None
     for index, entry in epochs {
       if entry.epoch.has_same_metadata(run.epoch) {
@@ -89,8 +112,54 @@ fn audit_summary(
         epochs[index] = {
           epoch: epochs[index].epoch,
           count: epochs[index].count + 1,
+          in_control: epochs[index].in_control + run_in_control,
+          warning: epochs[index].warning + run_warning,
+          requires_review: epochs[index].requires_review + run_requires_review,
+          incomplete: epochs[index].incomplete + run_incomplete,
         }
-      None => epochs.push({ epoch: run.epoch, count: 1 })
+      None =>
+        epochs.push({
+          epoch: run.epoch,
+          count: 1,
+          in_control: run_in_control,
+          warning: run_warning,
+          requires_review: run_requires_review,
+          incomplete: run_incomplete,
+        })
+    }
+  }
+  let control_rule_hits : Array[ControlRuleHitCount] = []
+  for assessment in trajectory.assessments {
+    for hit in assessment.hits {
+      let levels : Array[String] = []
+      for point in hit.evidence {
+        if !contains_level(levels, point.control_level_id) {
+          levels.push(point.control_level_id)
+        }
+      }
+      for level_id in levels {
+        let mut match_index : Int? = None
+        for index, entry in control_rule_hits {
+          if entry.control_level_id == level_id && entry.rule == hit.rule {
+            match_index = Some(index)
+            break
+          }
+        }
+        match match_index {
+          Some(index) =>
+            control_rule_hits[index] = {
+              control_level_id: control_rule_hits[index].control_level_id,
+              rule: control_rule_hits[index].rule,
+              count: control_rule_hits[index].count + 1,
+            }
+          None =>
+            control_rule_hits.push({
+              control_level_id: level_id,
+              rule: hit.rule,
+              count: 1,
+            })
+        }
+      }
     }
   }
   {
@@ -103,6 +172,7 @@ fn audit_summary(
     total_rule_hits,
     rule_hits,
     epoch_runs: epochs,
+    control_rule_hits,
     track_issues: trajectory.input_issues.length(),
   }
 }
@@ -195,7 +265,22 @@ fn audit_json_summary(summary : AuditSummary) -> Json {
         _ => Map([])
       }
       epoch_fields["run_count"] = Json::number(entry.count.to_double())
+      epoch_fields["status_counts"] = Json::object({
+        "InControl": Json::number(entry.in_control.to_double()),
+        "Warning": Json::number(entry.warning.to_double()),
+        "RequiresReview": Json::number(entry.requires_review.to_double()),
+        "Incomplete": Json::number(entry.incomplete.to_double()),
+      })
       Json::object(epoch_fields)
+    }),
+  )
+  fields["control_rule_hit_counts"] = Json::array(
+    summary.control_rule_hits.map(fn(entry) {
+      let control_fields : Map[String, Json] = Map([])
+      control_fields["control_level_id"] = Json::string(entry.control_level_id)
+      control_fields["rule"] = Json::string(entry.rule.name())
+      control_fields["count"] = Json::number(entry.count.to_double())
+      Json::object(control_fields)
     }),
   )
   fields["track_issue_count"] = Json::number(summary.track_issues.to_double())
@@ -223,6 +308,59 @@ pub fn render_audit_json(
     trajectory.assessments.map(json_assessment),
   )
   fields["input_issues"] = Json::array(trajectory.input_issues.map(json_issue))
+  Json::object(fields).stringify(indent=2)
+}
+
+///|
+/// Render a deterministic manifest for the files produced by the offline
+/// review bundle. The manifest contains no source path or wall-clock time.
+pub fn render_audit_manifest(
+  program : @assay.AssayProgram,
+  runs : Array[@run.QCRun],
+  trajectory : @evidence.Trajectory,
+) -> String {
+  let summary = audit_summary(runs, trajectory)
+  let fields : Map[String, Json] = Map([])
+  fields["schema_version"] = Json::number(1.0)
+  fields["report_schema_version"] = Json::number(1.0)
+  fields["assay_id"] = Json::string(program.assay_id)
+  fields["counts"] = Json::object({
+    "input_runs": Json::number(summary.input_runs.to_double()),
+    "assessed_runs": Json::number(summary.assessed_runs.to_double()),
+    "epoch_count": Json::number(summary.epoch_runs.length().to_double()),
+    "track_issue_count": Json::number(summary.track_issues.to_double()),
+    "rule_hit_count": Json::number(summary.total_rule_hits.to_double()),
+    "status_counts": Json::object({
+      "InControl": Json::number(summary.in_control.to_double()),
+      "Warning": Json::number(summary.warning.to_double()),
+      "RequiresReview": Json::number(summary.requires_review.to_double()),
+      "Incomplete": Json::number(summary.incomplete.to_double()),
+    }),
+  })
+  fields["artifacts"] = Json::array(
+    [
+      {
+        "path": Json::string("report.html"),
+        "media_type": Json::string("text/html"),
+      },
+      {
+        "path": Json::string("audit.json"),
+        "media_type": Json::string("application/json"),
+      },
+      {
+        "path": Json::string("audit.csv"),
+        "media_type": Json::string("text/csv"),
+      },
+      {
+        "path": Json::string("chart.svg"),
+        "media_type": Json::string("image/svg+xml"),
+      },
+      {
+        "path": Json::string("manifest.json"),
+        "media_type": Json::string("application/json"),
+      },
+    ].map(fn(artifact) { Json::object(artifact) }),
+  )
   Json::object(fields).stringify(indent=2)
 }
 

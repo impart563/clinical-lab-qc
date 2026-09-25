@@ -24,11 +24,15 @@ pub fn parse_assay_program_json(String) -> @io.ProgramConfigResult
 
 pub fn parse_qc_csv(@assay.AssayProgram, String) -> @io.CsvParseResult
 
+pub fn parse_qc_csv_detailed(@assay.AssayProgram, String) -> @io.CsvParseDetailedResult
+
 pub fn render_audit_csv(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
 pub fn render_audit_html(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
 pub fn render_audit_json(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
+
+pub fn render_audit_manifest(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
 pub fn render_audit_markdown(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
@@ -66,6 +70,10 @@ pub using @evidence {type AssessmentStatus}
 pub using @assay {type ControlLevel}
 
 pub using @run {type ControlPoint}
+
+pub using @io {type CsvDiagnostic}
+
+pub using @io {type CsvParseDetailedResult}
 
 pub using @io {type CsvParseResult}
 

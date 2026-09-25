@@ -5,6 +5,25 @@ pub(all) struct CsvParseResult {
 } derive(Debug)
 
 ///|
+/// A CSV problem with machine-readable source coordinates when the parser can
+/// identify them. `line`, `column`, and `field` are one-based physical CSV
+/// positions; track-integrity issues are reported separately by replay.
+pub(all) struct CsvDiagnostic {
+  issue : @evidence.InputIssue
+  line : Int?
+  column : Int?
+  field : String?
+} derive(Debug)
+
+///|
+/// Detailed CSV parsing result. The compatibility API `parse_qc_csv` returns
+/// the same runs and issues without source coordinates.
+pub(all) struct CsvParseDetailedResult {
+  runs : Array[@run.QCRun]
+  diagnostics : Array[CsvDiagnostic]
+} derive(Debug)
+
+///|
 priv struct CsvTable {
   rows : Array[Array[String]]
   row_lines : Array[Int]
@@ -21,6 +40,7 @@ priv struct CsvRecord {
   timestamp : String
   control_level_id : String
   value : Int64?
+  line : Int
 }
 
 ///|
@@ -272,6 +292,18 @@ fn csv_issue(
 }
 
 ///|
+fn csv_diagnostic(
+  code : @evidence.InputIssueCode,
+  run_id : String?,
+  message : String,
+  line : Int?,
+  column : Int?,
+  field : String?,
+) -> CsvDiagnostic {
+  { issue: csv_issue(code, run_id, message), line, column, field }
+}
+
+///|
 fn contains_level(values : Array[String], value : String) -> Bool {
   for item in values {
     if item == value {
@@ -286,8 +318,22 @@ pub fn parse_qc_csv(
   program : @assay.AssayProgram,
   text : String,
 ) -> CsvParseResult {
+  let detailed = parse_qc_csv_detailed(program, text)
+  {
+    runs: detailed.runs,
+    issues: detailed.diagnostics.map(fn(diagnostic) { diagnostic.issue }),
+  }
+}
+
+///|
+/// Parse the documented long-form QC CSV while retaining structured physical
+/// line, column, and field information for each CSV diagnostic.
+pub fn parse_qc_csv_detailed(
+  program : @assay.AssayProgram,
+  text : String,
+) -> CsvParseDetailedResult {
   let table = parse_csv_table(text)
-  let issues : Array[@evidence.InputIssue] = []
+  let diagnostics : Array[CsvDiagnostic] = []
   match table.error {
     Some(message) => {
       let location = match (table.error_line, table.error_column) {
@@ -295,8 +341,17 @@ pub fn parse_qc_csv(
           "line " + line.to_string() + ", column " + column.to_string() + ": "
         _ => "CSV input: "
       }
-      issues.push(csv_issue(@evidence.CsvMalformed, None, location + message))
-      return { runs: [], issues }
+      diagnostics.push(
+        csv_diagnostic(
+          @evidence.CsvMalformed,
+          None,
+          location + message,
+          table.error_line,
+          table.error_column,
+          None,
+        ),
+      )
+      return { runs: [], diagnostics }
     }
     None => ()
   }
@@ -305,27 +360,33 @@ pub fn parse_qc_csv(
     "run_id", "sequence", "timestamp", "control_level_id", "value",
   ]
   if table.rows.length() == 0 || table.rows[0] != expected {
-    issues.push(
-      csv_issue(
+    diagnostics.push(
+      csv_diagnostic(
         @evidence.CsvHeader,
         None,
         "CSV header must be the documented ten-column long format",
+        Some(1),
+        Some(1),
+        None,
       ),
     )
-    return { runs: [], issues }
+    return { runs: [], diagnostics }
   }
   let records : Array[CsvRecord] = []
   for row_index in 1..<table.rows.length() {
     let row = table.rows[row_index]
     let physical_line = table.row_lines[row_index]
     if row.length() != expected.length() {
-      issues.push(
-        csv_issue(
+      diagnostics.push(
+        csv_diagnostic(
           @evidence.CsvMalformed,
           None,
           csv_line_location(physical_line) +
           ": expected 10 columns but found " +
           row.length().to_string(),
+          Some(physical_line),
+          None,
+          None,
         ),
       )
     } else {
@@ -340,26 +401,65 @@ pub fn parse_qc_csv(
       match parse_scaled(row[6], 0) {
         Parsed(sequence) =>
           if sequence <= 0L {
-            issues.push(
-              csv_issue(
+            diagnostics.push(
+              csv_diagnostic(
                 @evidence.CsvMalformed,
                 Some(run_id),
                 csv_field_location(physical_line, "sequence", 7) +
                 ": run sequence must be positive",
+                Some(physical_line),
+                Some(7),
+                Some("sequence"),
               ),
             )
           } else if !epoch.is_valid() ||
             run_id.trim().is_empty() ||
             row[7].trim().is_empty() {
-            issues.push(
-              csv_issue(
+            let (field, column) = if row[0].trim().is_empty() {
+              ("epoch_id", 1)
+            } else if row[1].trim().is_empty() {
+              ("reagent_lot", 2)
+            } else if row[2].trim().is_empty() {
+              ("control_lot", 3)
+            } else if row[3].trim().is_empty() {
+              ("calibration_id", 4)
+            } else if row[4].trim().is_empty() {
+              ("program_version", 5)
+            } else if run_id.trim().is_empty() {
+              ("run_id", 6)
+            } else {
+              ("timestamp", 8)
+            }
+            diagnostics.push(
+              csv_diagnostic(
                 @evidence.CsvMalformed,
                 Some(run_id),
-                csv_line_location(physical_line) +
-                ": epoch metadata, run id, and timestamp must not be empty",
+                csv_field_location(physical_line, field, column) +
+                ": field must not be empty",
+                Some(physical_line),
+                Some(column),
+                Some(field),
               ),
             )
           } else {
+            if !contains_level(
+                program.levels.map(fn(level) { level.id }),
+                row[8],
+              ) {
+              diagnostics.push(
+                csv_diagnostic(
+                  @evidence.UnknownControlLevel,
+                  Some(run_id),
+                  csv_field_location(physical_line, "control_level_id", 9) +
+                  ": unknown control level '" +
+                  row[8] +
+                  "'",
+                  Some(physical_line),
+                  Some(9),
+                  Some("control_level_id"),
+                ),
+              )
+            }
             match parse_scaled(row[9], program.precision) {
               Parsed(value) =>
                 records.push({
@@ -369,6 +469,7 @@ pub fn parse_qc_csv(
                   timestamp: row[7],
                   control_level_id: row[8],
                   value: Some(value),
+                  line: physical_line,
                 })
               Missing =>
                 records.push({
@@ -378,34 +479,44 @@ pub fn parse_qc_csv(
                   timestamp: row[7],
                   control_level_id: row[8],
                   value: None,
+                  line: physical_line,
                 })
               Invalid(message) =>
-                issues.push(
-                  csv_issue(
+                diagnostics.push(
+                  csv_diagnostic(
                     @evidence.CsvPrecision,
                     Some(run_id),
                     csv_field_location(physical_line, "value", 10) +
                     ": " +
                     message,
+                    Some(physical_line),
+                    Some(10),
+                    Some("value"),
                   ),
                 )
             }
           }
         Missing =>
-          issues.push(
-            csv_issue(
+          diagnostics.push(
+            csv_diagnostic(
               @evidence.CsvMalformed,
               Some(run_id),
               csv_field_location(physical_line, "sequence", 7) +
               ": run sequence is required",
+              Some(physical_line),
+              Some(7),
+              Some("sequence"),
             ),
           )
         Invalid(message) =>
-          issues.push(
-            csv_issue(
+          diagnostics.push(
+            csv_diagnostic(
               @evidence.CsvMalformed,
               Some(run_id),
               csv_field_location(physical_line, "sequence", 7) + ": " + message,
+              Some(physical_line),
+              Some(7),
+              Some("sequence"),
             ),
           )
       }
@@ -424,26 +535,28 @@ pub fn parse_qc_csv(
       if !first.epoch.has_same_metadata(record.epoch) ||
         first.sequence != record.sequence ||
         first.timestamp != record.timestamp {
-        issues.push(
-          csv_issue(
+        diagnostics.push(
+          csv_diagnostic(
             @evidence.CsvMalformed,
             Some(first.run_id),
-            csv_line_location(table.row_lines[next_index]) +
+            csv_line_location(record.line) +
             ": metadata must be identical across rows for one run",
+            Some(record.line),
+            None,
+            None,
           ),
         )
       } else if contains_level(seen_levels, record.control_level_id) {
-        issues.push(
-          csv_issue(
+        diagnostics.push(
+          csv_diagnostic(
             @evidence.DuplicateControlPoint,
             Some(first.run_id),
-            csv_field_location(
-              table.row_lines[next_index],
-              "control_level_id",
-              9,
-            ) +
+            csv_field_location(record.line, "control_level_id", 9) +
             ": duplicate row for control level " +
             record.control_level_id,
+            Some(record.line),
+            Some(9),
+            Some("control_level_id"),
           ),
         )
       } else {
@@ -469,5 +582,5 @@ pub fn parse_qc_csv(
     })
     index = next_index
   }
-  { runs, issues }
+  { runs, diagnostics }
 }

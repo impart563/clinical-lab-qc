@@ -71,6 +71,26 @@ fn html_find_evidence_run_index(
 }
 
 ///|
+fn html_find_control_rule_run_index(
+  trajectory : @evidence.Trajectory,
+  control_level_id : String,
+  rule : @assay.Rule,
+) -> Int? {
+  for index, assessment in trajectory.assessments {
+    for hit in assessment.hits {
+      if hit.rule == rule {
+        for point in hit.evidence {
+          if point.control_level_id == control_level_id {
+            return Some(index)
+          }
+        }
+      }
+    }
+  }
+  None
+}
+
+///|
 fn html_append_status_card(
   output : StringBuilder,
   label : String,
@@ -319,6 +339,38 @@ pub fn render_audit_html(
     }
     output.write_string("</tbody></table>\n")
   }
+  output.write_string("<h3>Control rule hit counts</h3>\n")
+  if summary.control_rule_hits.length() == 0 {
+    output.write_string("<p class=\"empty\">No control-level rule hits.</p>\n")
+  } else {
+    output.write_string(
+      "<table><thead><tr><th>Control</th><th>Rule</th><th>Hit runs</th><th>Navigate</th></tr></thead><tbody>\n",
+    )
+    for entry in summary.control_rule_hits {
+      output.write_string("<tr><td>")
+      output.write_string(html_escape(entry.control_level_id))
+      output.write_string("</td><td>")
+      output.write_string(entry.rule.name())
+      output.write_string("</td><td>")
+      output.write_string(entry.count.to_string())
+      output.write_string("</td><td>")
+      match
+        html_find_control_rule_run_index(
+          trajectory,
+          entry.control_level_id,
+          entry.rule,
+        ) {
+        Some(index) => {
+          output.write_string("<a href=\"#run-")
+          output.write_string(index.to_string())
+          output.write_string("\">Open first signal</a>")
+        }
+        None => output.write_string("No evidence run")
+      }
+      output.write_string("</td></tr>\n")
+    }
+    output.write_string("</tbody></table>\n")
+  }
   output.write_string("</section>\n")
 
   output.write_string(
@@ -363,7 +415,7 @@ pub fn render_audit_html(
     output.write_string("<p class=\"empty\">No epochs.</p>\n")
   } else {
     output.write_string(
-      "<table><thead><tr><th>Epoch</th><th>Reagent lot</th><th>Control lot</th><th>Calibration</th><th>Program version</th><th>Runs</th><th>Navigate</th></tr></thead><tbody>\n",
+      "<table><thead><tr><th>Epoch</th><th>Reagent lot</th><th>Control lot</th><th>Calibration</th><th>Program version</th><th>Runs</th><th>In control</th><th>Warning</th><th>Requires review</th><th>Incomplete</th><th>Navigate</th></tr></thead><tbody>\n",
     )
     for entry in summary.epoch_runs {
       output.write_string("<tr><td>")
@@ -378,6 +430,14 @@ pub fn render_audit_html(
       output.write_string(html_escape(entry.epoch.program_version))
       output.write_string("</td><td>")
       output.write_string(entry.count.to_string())
+      output.write_string("</td><td>")
+      output.write_string(entry.in_control.to_string())
+      output.write_string("</td><td>")
+      output.write_string(entry.warning.to_string())
+      output.write_string("</td><td>")
+      output.write_string(entry.requires_review.to_string())
+      output.write_string("</td><td>")
+      output.write_string(entry.incomplete.to_string())
       output.write_string("</td><td>")
       match html_find_epoch_run_index(runs, entry.epoch) {
         Some(index) => {

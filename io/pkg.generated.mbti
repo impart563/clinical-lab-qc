@@ -13,11 +13,15 @@ pub fn parse_assay_program_json(String) -> ProgramConfigResult
 
 pub fn parse_qc_csv(@assay.AssayProgram, String) -> CsvParseResult
 
+pub fn parse_qc_csv_detailed(@assay.AssayProgram, String) -> CsvParseDetailedResult
+
 pub fn render_audit_csv(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
 pub fn render_audit_html(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
 pub fn render_audit_json(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
+
+pub fn render_audit_manifest(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
 pub fn render_audit_markdown(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
@@ -30,6 +34,18 @@ pub fn render_trajectory_markdown(@evidence.Trajectory) -> String
 // Errors
 
 // Types and methods
+pub(all) struct CsvDiagnostic {
+  issue : @evidence.InputIssue
+  line : Int?
+  column : Int?
+  field : String?
+} derive(@debug.Debug)
+
+pub(all) struct CsvParseDetailedResult {
+  runs : Array[@run.QCRun]
+  diagnostics : Array[CsvDiagnostic]
+} derive(@debug.Debug)
+
 pub(all) struct CsvParseResult {
   runs : Array[@run.QCRun]
   issues : Array[@evidence.InputIssue]

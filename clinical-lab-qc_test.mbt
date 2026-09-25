@@ -418,6 +418,18 @@ test "CSV parsing preserves quotes, exact decimal precision, empty values, and d
       "line 2, field 'value' (column 10)",
     ),
   )
+  let detailed_precision = parse_qc_csv_detailed(
+    program,
+    csv.replace(old="1.25", new="1.250"),
+  )
+  assert_eq(detailed_precision.diagnostics.length(), 1)
+  assert_eq(
+    detailed_precision.diagnostics[0].issue.code,
+    @evidence.CsvPrecision,
+  )
+  assert_eq(detailed_precision.diagnostics[0].line, Some(2))
+  assert_eq(detailed_precision.diagnostics[0].column, Some(10))
+  assert_eq(detailed_precision.diagnostics[0].field, Some("value"))
   let i64_min = parse_qc_csv(
     program,
     csv.replace(old="1.25", new="-92233720368547758.08"),
@@ -451,4 +463,35 @@ test "CSV diagnostics use physical positions across quoted multiline CRLF fields
   assert_true(
     parsed.issues[0].message.contains("line 4, field 'value' (column 10)"),
   )
+  let detailed = parse_qc_csv_detailed(program, csv)
+  assert_eq(detailed.diagnostics[0].line, Some(4))
+  assert_eq(detailed.diagnostics[0].column, Some(10))
+  assert_eq(detailed.diagnostics[0].field, Some("value"))
+}
+
+///|
+test "CSV unknown control levels have stable codes and exact field locations" {
+  let program = test_program_one(10000L, 100L, 2)
+  let csv = "epoch_id,reagent_lot,control_lot,calibration_id,program_version,run_id,sequence,timestamp,control_level_id,value\n" +
+    "e,r,c,k,v,run-1,1,time,L9,100.00\n"
+  let parsed = parse_qc_csv_detailed(program, csv)
+  assert_eq(parsed.diagnostics.length(), 1)
+  assert_eq(parsed.diagnostics[0].issue.code, @evidence.UnknownControlLevel)
+  assert_eq(parsed.diagnostics[0].line, Some(2))
+  assert_eq(parsed.diagnostics[0].column, Some(9))
+  assert_eq(parsed.diagnostics[0].field, Some("control_level_id"))
+}
+
+///|
+test "duplicate control diagnostics point to the duplicate physical row" {
+  let program = test_program_one(10000L, 100L, 2)
+  let csv = "epoch_id,reagent_lot,control_lot,calibration_id,program_version,run_id,sequence,timestamp,control_level_id,value\n" +
+    "e,r,c,k,v,run-1,1,time,L1,100.00\n" +
+    "e,r,c,k,v,run-1,1,time,L1,100.00\n"
+  let parsed = parse_qc_csv_detailed(program, csv)
+  assert_eq(parsed.diagnostics.length(), 1)
+  assert_eq(parsed.diagnostics[0].issue.code, @evidence.DuplicateControlPoint)
+  assert_eq(parsed.diagnostics[0].line, Some(3))
+  assert_eq(parsed.diagnostics[0].column, Some(9))
+  assert_eq(parsed.diagnostics[0].field, Some("control_level_id"))
 }

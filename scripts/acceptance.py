@@ -82,6 +82,15 @@ def verify_scenario(name: str) -> None:
             entry["id"]: entry["run_count"] for entry in summary["epoch_run_counts"]
         }
         require(epoch_counts == {"lot-a": 6, "lot-b": 6}, "step-shift: epoch run counts changed")
+        epoch_statuses = {
+            entry["id"]: entry["status_counts"]
+            for entry in summary["epoch_run_counts"]
+        }
+        require(
+            all(statuses == {"InControl": 6, "Warning": 0, "RequiresReview": 0, "Incomplete": 0}
+                for statuses in epoch_statuses.values()),
+            "step-shift: per-epoch status counts changed",
+        )
 
     expected_nonzero: dict[str, int]
     expected_statuses: dict[str, int]
@@ -102,8 +111,28 @@ def verify_scenario(name: str) -> None:
         if entry["count"]
     }
     require(actual_statuses == expected_statuses, f"{name}: unexpected status counts {actual_statuses}")
+    epoch_status_totals = Counter()
+    for entry in summary["epoch_run_counts"]:
+        epoch_status_totals.update(entry["status_counts"])
+    require(
+        dict(epoch_status_totals) == status_counts,
+        f"{name}: per-epoch statuses do not reconcile with track totals",
+    )
     require(actual_rules == expected_rules, f"{name}: unexpected rule counts {actual_rules}")
     require(summary["total_rule_hits"] == sum(expected_nonzero.values()), f"{name}: unexpected hit total")
+    expected_control_rules = (
+        {("L1", "1_2s"): 1, ("L1", "4_1s"): 6, ("L1", "10x"): 2}
+        if name == "gradual-drift"
+        else {}
+    )
+    actual_control_rules = {
+        (entry["control_level_id"], entry["rule"]): entry["count"]
+        for entry in summary["control_rule_hit_counts"]
+    }
+    require(
+        actual_control_rules == expected_control_rules,
+        f"{name}: unexpected control-level hit counts {actual_control_rules}",
+    )
 
     csv_rows = list(csv.DictReader(io.StringIO(outputs["csv"])))
     assessments = [row for row in csv_rows if row["record_type"] == "assessment"]
@@ -251,8 +280,26 @@ def verify_input_preflight() -> None:
     incomplete = json.loads(check_format(missing_control, "json").stdout)
     require(incomplete["valid"] is True, "missing observations should not be parse errors")
     require(incomplete["warning_count"] == 3, "missing required controls should be warnings")
+    require(
+        all(issue["severity"] == "warning" for issue in incomplete["warnings"]),
+        "missing-control diagnostics should carry warning severity",
+    )
+    require(
+        all(issue["location"] is None for issue in incomplete["warnings"]),
+        "missing-control replay warnings should not claim a CSV field location",
+    )
 
     bad_precision = source.replace(",L1,100\n", ",L1,100.1\n", 1)
+    invalid_precision_json = json.loads(
+        check_format(bad_precision, "json", expected=2).stdout
+    )
+    diagnostic = invalid_precision_json["errors"][0]
+    require(diagnostic["severity"] == "error", "structured CSV error severity missing")
+    require(diagnostic["code"] == "csv_precision", "structured CSV issue code changed")
+    require(
+        diagnostic["location"] == {"line": 2, "column": 10, "field": "value"},
+        f"structured CSV location missing: {diagnostic['location']}",
+    )
     invalid_precision = check_format(bad_precision, "text", expected=2)
     require("Input preflight: invalid" in invalid_precision.stdout, "invalid precision passed preflight")
     require("line 2, field 'value' (column 10)" in invalid_precision.stdout, "CSV location was missing")
@@ -265,6 +312,22 @@ def verify_input_preflight() -> None:
     require(
         any(issue["code"] == "non_increasing_sequence" for issue in invalid_track["errors"]),
         f"track sequence diagnostic was missing: {invalid_track['errors']}",
+    )
+    require(
+        invalid_track["errors"][0]["location"] is None,
+        "track-integrity issue should not claim a CSV field position",
+    )
+
+    unknown_level = source.replace(",L1,100\n", ",LX,100\n", 1)
+    unknown = json.loads(check_format(unknown_level, "json", expected=2).stdout)
+    require(
+        unknown["errors"][0]["code"] == "unknown_control_level",
+        "unknown CSV control level code changed",
+    )
+    require(
+        unknown["errors"][0]["location"]
+        == {"line": 2, "column": 9, "field": "control_level_id"},
+        "unknown control level location missing",
     )
 
     qc_signal_only = source.replace(",L1,100\n", ",L1,1000\n", 1)
@@ -319,6 +382,72 @@ def verify_report_file_output() -> None:
             expected=2,
         )
         require("unable to write report file" in failed_write.stdout, "write failure message was unclear")
+
+
+def verify_review_bundle() -> None:
+    print("Verify deterministic offline review bundle")
+    expected_names = {"report.html", "audit.json", "audit.csv", "chart.svg", "manifest.json"}
+    with tempfile.TemporaryDirectory(prefix="clinical lab qc bundle ") as directory:
+        base = Path(directory)
+        first_dir = base / "first bundle"
+        second_dir = base / "second bundle"
+        first_dir.mkdir()
+        (first_dir / "report.html").write_text("stale", encoding="utf-8")
+        for output_dir in (first_dir, second_dir):
+            written = command(
+                [
+                    "moon",
+                    "run",
+                    "--target",
+                    "native",
+                    "cmd/demo",
+                    "--",
+                    "--scenario",
+                    "gradual-drift",
+                    "--bundle",
+                    str(output_dir),
+                ]
+            )
+            require(
+                written.stdout.strip() == f"Review bundle written to '{output_dir}'",
+                "bundle completion message missing",
+            )
+        first_files = {path.name: path.read_bytes() for path in first_dir.iterdir()}
+        second_files = {path.name: path.read_bytes() for path in second_dir.iterdir()}
+        require(set(first_files) == expected_names, f"unexpected bundle files: {set(first_files)}")
+        require(first_files == second_files, "bundle artifacts changed between identical replays")
+        manifest = json.loads(first_files["manifest.json"].decode("utf-8"))
+        require(manifest["schema_version"] == 1, "manifest version changed")
+        require(manifest["report_schema_version"] == 1, "report schema version missing")
+        require(manifest["counts"]["input_runs"] == 12, "manifest run count changed")
+        require(manifest["counts"]["epoch_count"] == 1, "manifest epoch count changed")
+        require(
+            manifest["counts"]["status_counts"]
+            == {"InControl": 6, "Warning": 0, "RequiresReview": 6, "Incomplete": 0},
+            "manifest status summary changed",
+        )
+        require("timestamp" not in manifest, "manifest should not add a volatile timestamp")
+        html_report = first_files["report.html"].decode("utf-8")
+        require("https://" not in html_report.lower(), "bundle HTML must remain offline")
+        invalid_options = command(
+            [
+                "moon",
+                "run",
+                "--target",
+                "native",
+                "cmd/demo",
+                "--",
+                "--bundle",
+                str(base / "invalid bundle"),
+                "--format",
+                "json",
+            ],
+            expected=2,
+        )
+        require(
+            "--bundle exports every supported format" in invalid_options.stdout,
+            "conflicting bundle format options were accepted",
+        )
 
 
 def main() -> int:
@@ -400,6 +529,7 @@ def main() -> int:
 
     verify_input_preflight()
     verify_report_file_output()
+    verify_review_bundle()
 
     print("Build Moon package archive")
     moon("package")
