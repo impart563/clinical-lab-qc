@@ -13,6 +13,7 @@ moon run --target native cmd/demo -- --scenario stable
 moon run --target native cmd/demo -- --scenario step-shift
 moon run --target native cmd/demo -- --scenario gradual-drift
 moon run --target native cmd/demo -- --scenario gradual-drift --format json
+moon run --target native cmd/demo -- --scenario gradual-drift --format svg > gradual-drift.svg
 moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format json
 moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format csv
 moon run --target native cmd/demo -- --program examples/demo-program.json --check-program
@@ -34,9 +35,11 @@ Assay profile JSON uses `schema_version: 1`; unknown fields are rejected. Contro
 
 ## Public API
 
-The root package exports `validate_program`, `parse_assay_program_json`, `evaluate_run`, and `replay_track`, plus the domain types `AssayProgram`, `QCEpoch`, `QCRun`, `ControlPoint`, `RuleHit`, `RunAssessment`, and `Trajectory`.
+The root package exports `validate_program`, `parse_assay_program_json`, `evaluate_run`, `replay_track`, and `render_levey_jennings_svg`, plus the domain types `AssayProgram`, `QCEpoch`, `QCRun`, `ControlPoint`, `RuleHit`, `RunAssessment`, and `Trajectory`.
 
 The compiled [quickstart example](examples/quickstart/main.mbt) shows the complete API path: configure an assay and QC epoch, construct ordered runs, replay them, and render a report. Exact rule windows and implementation limits are documented in [Rule semantics](docs/rule-semantics.md).
+
+`render_levey_jennings_svg(program, runs, trajectory)` returns a standalone offline SVG chart with one panel per control level, mean and ±1/2/3 SD lines, run-sequence labels, and hover details for observations. Missing values and epoch changes break the plotted line; epoch changes are marked with a vertical boundary. Rule evidence uses a distinct marker for warning, review-required, or disabled dispositions.
 
 An `AssayProgram` declares an assay, measurement unit, decimal precision, control levels with target means and positive standard deviations, required levels, and rule policies. Values are signed `Int64` scaled integers: with precision `2`, `100.25` is represented as `10025`. Comparisons never convert to floating point. Arithmetic overflow is returned as an input issue.
 
@@ -67,7 +70,7 @@ moon test --target all
 moon package
 ```
 
-The CI also denies compiler warnings, checks custom-program preflight and replay, verifies the audit JSON/CSV outputs, runs the quickstart, and checks the package artifact. The tests cover strict threshold boundaries, all six rules, stage isolation, missing-value window resets, input validation, overflow reporting, CSV parsing and escaping, stable versioned reports, and all demo scenarios.
+The CI also denies compiler warnings, checks custom-program preflight and replay, verifies the audit JSON/CSV and SVG outputs, runs the quickstart, and checks the package artifact. The tests cover strict threshold boundaries, all six rules, stage isolation, missing-value window resets, input validation, overflow reporting, CSV parsing and escaping, stable versioned reports and charts, chart gaps and epoch markers, and all demo scenarios.
 
 ## License
 

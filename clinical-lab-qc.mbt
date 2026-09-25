@@ -86,6 +86,7 @@ pub using @io {
   render_audit_csv,
   render_audit_json,
   render_audit_markdown,
+  render_levey_jennings_svg,
   render_trajectory_markdown,
   render_trajectory_json,
 }

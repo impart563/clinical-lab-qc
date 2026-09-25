@@ -19,6 +19,8 @@ pub fn render_audit_json(@assay.AssayProgram, Array[@run.QCRun], @evidence.Traje
 
 pub fn render_audit_markdown(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
+pub fn render_levey_jennings_svg(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
+
 pub fn render_trajectory_json(@evidence.Trajectory) -> String
 
 pub fn render_trajectory_markdown(@evidence.Trajectory) -> String

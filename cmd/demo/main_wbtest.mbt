@@ -33,6 +33,14 @@ test "CLI accepts CSV report output" {
 }
 
 ///|
+test "CLI accepts SVG chart output" {
+  match parse_cli_args(["--scenario", "gradual-drift", "--format", "svg"]) {
+    Ok(options) => assert_true(options.format == "svg")
+    Err(_) => fail("SVG chart format should parse")
+  }
+}
+
+///|
 test "CLI accepts a program for validation or CSV replay" {
   match
     parse_cli_args([
