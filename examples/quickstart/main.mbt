@@ -1,6 +1,6 @@
 ///|
-fn example_trajectory() -> @qc.Trajectory {
-  let program : @qc.AssayProgram = {
+fn example_program() -> @qc.AssayProgram {
+  {
     assay_id: "example-analyte",
     unit: "unit/L",
     precision: 0,
@@ -9,6 +9,10 @@ fn example_trajectory() -> @qc.Trajectory {
     ],
     rule_policies: @qc.default_rule_policies(),
   }
+}
+
+///|
+fn example_runs() -> Array[@qc.QCRun] {
   let epoch = @qc.QCEpoch::{
     id: "lot-2026-a",
     reagent_lot: "reagent-a",
@@ -16,7 +20,7 @@ fn example_trajectory() -> @qc.Trajectory {
     calibration_id: "calibration-a",
     program_version: "v1",
   }
-  let runs : Array[@qc.QCRun] = [
+  [
     {
       run_id: "run-1",
       epoch,
@@ -32,10 +36,13 @@ fn example_trajectory() -> @qc.Trajectory {
       observations: [{ control_level_id: "normal", value: 104L, precision: 0 }],
     },
   ]
-  @qc.replay_track(program, runs)
 }
 
 ///|
 fn main {
-  println(@qc.render_trajectory_markdown(example_trajectory()))
+  let program = example_program()
+  let runs = example_runs()
+  let trajectory = @qc.replay_track(program, runs)
+  println(@qc.render_audit_markdown(program, runs, trajectory))
+  println(@qc.render_levey_jennings_svg(program, runs, trajectory))
 }
