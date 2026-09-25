@@ -19,8 +19,18 @@ repository = "https://github.com/impart563/clinical-lab-qc"
 
 license = "Apache-2.0"
 
-keywords = [ ]
+keywords = [
+  "clinical-laboratory",
+  "quality-control",
+  "westgard",
+  "iqc",
+  "replay",
+]
 
 preferred_target = "wasm"
 
 description = "Offline MoonBit internal quality-control analysis and deterministic replay"
+
+import {
+  "moonbitlang/async@0.19.4",
+}

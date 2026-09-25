@@ -1,7 +1,16 @@
 import {
+  "moonbitlang/core/argparse",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
   "impart563/clinical-lab-qc" @lib,
   "impart563/clinical-lab-qc/cmd/demo/scenarios",
   "moonbitlang/core/env",
 }
 
 pkgtype(kind: "executable")
+
+supported_targets = "+native"
+
+import {
+  "moonbitlang/core/test",
+} for "test"

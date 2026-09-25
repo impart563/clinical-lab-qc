@@ -13,6 +13,8 @@ moon run --target native cmd/demo -- --scenario stable
 moon run --target native cmd/demo -- --scenario step-shift
 moon run --target native cmd/demo -- --scenario gradual-drift
 moon run --target native cmd/demo -- --scenario gradual-drift --format json
+moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format json
+moon run --target native examples/quickstart
 ```
 
 The default Markdown output lists the run status, each triggered rule, the evidence points, comparison distances, and input issues. JSON output uses exact integer values and a fixed field order. Replaying the same scenario produces the same output.
@@ -20,10 +22,14 @@ The default Markdown output lists the run status, each triggered rule, the evide
 - `stable` shows a stable synthetic track without rule hits.
 - `step-shift` shows two QC epochs. The new lot and calibration start fresh rule windows.
 - `gradual-drift` shows consecutive-run signals and the points that support them.
+- `--input` replays a long-form CSV using the demo assay program. CSV files with parse issues fail with a nonzero process status.
+- `examples/quickstart` is a small downstream-style program that constructs the public API types and calls `replay_track`.
 
 ## Public API
 
 The root package exports `validate_program`, `evaluate_run`, and `replay_track`, plus the domain types `AssayProgram`, `QCEpoch`, `QCRun`, `ControlPoint`, `RuleHit`, `RunAssessment`, and `Trajectory`.
+
+The compiled [quickstart example](examples/quickstart/main.mbt) shows the complete API path: configure an assay and QC epoch, construct ordered runs, replay them, and render a report. Exact rule windows and implementation limits are documented in [Rule semantics](docs/rule-semantics.md).
 
 An `AssayProgram` declares an assay, measurement unit, decimal precision, control levels with target means and positive standard deviations, required levels, and rule policies. Values are signed `Int64` scaled integers: with precision `2`, `100.25` is represented as `10025`. Comparisons never convert to floating point. Arithmetic overflow is returned as an input issue.
 
@@ -51,9 +57,10 @@ Run the same checks used by CI:
 moon check --target all
 moon build --target native
 moon test --target all
+moon package
 ```
 
-The tests cover strict threshold boundaries, all six rules, stage isolation, missing-value window resets, input validation, overflow reporting, CSV parsing, stable JSON, and all demo scenarios.
+The CI also denies compiler warnings, runs the CSV CLI and quickstart, and checks the package artifact. The tests cover strict threshold boundaries, all six rules, stage isolation, missing-value window resets, input validation, overflow reporting, CSV parsing, stable JSON, and all demo scenarios.
 
 ## License
 

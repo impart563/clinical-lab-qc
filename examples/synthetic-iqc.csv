@@ -1,0 +1,7 @@
+epoch_id,reagent_lot,control_lot,calibration_id,program_version,run_id,sequence,timestamp,control_level_id,value
+synthetic-epoch,reagent-a,control-a,cal-a,v1,sample-1,1,2026-09-25T08:00:00Z,L1,100
+synthetic-epoch,reagent-a,control-a,cal-a,v1,sample-1,1,2026-09-25T08:00:00Z,L2,200
+synthetic-epoch,reagent-a,control-a,cal-a,v1,sample-2,2,2026-09-25T08:05:00Z,L1,104
+synthetic-epoch,reagent-a,control-a,cal-a,v1,sample-2,2,2026-09-25T08:05:00Z,L2,207
+synthetic-epoch,reagent-a,control-a,cal-a,v1,sample-3,3,2026-09-25T08:10:00Z,L1,97
+synthetic-epoch,reagent-a,control-a,cal-a,v1,sample-3,3,2026-09-25T08:10:00Z,L2,194

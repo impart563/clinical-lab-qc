@@ -1,0 +1,5 @@
+import {
+  "impart563/clinical-lab-qc" @qc,
+}
+
+pkgtype(kind: "executable")

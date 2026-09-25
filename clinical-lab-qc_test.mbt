@@ -361,6 +361,24 @@ test "integer overflow is reported and never becomes a rule hit" {
   assert_true(assessment.input_issues.length() > 0)
   assert_true(assessment.input_issues[0].code == @evidence.ArithmeticOverflow)
   assert_true(!contains_rule(assessment, @assay.Rule12s))
+  let min_i64 = -9223372036854775807L - 1L
+  let max_i64 = 9223372036854775807L
+  let subtraction_overflow = evaluate_run(
+    test_program_one(min_i64, 1L, 0),
+    test_single_run("subtraction-overflow", 1L, max_i64, 0),
+    [],
+  )
+  assert_true(
+    subtraction_overflow.input_issues[0].code == @evidence.ArithmeticOverflow,
+  )
+  let absolute_overflow = evaluate_run(
+    test_program_one(0L, 1L, 0),
+    test_single_run("absolute-overflow", 1L, min_i64, 0),
+    [],
+  )
+  assert_true(
+    absolute_overflow.input_issues[0].code == @evidence.ArithmeticOverflow,
+  )
 }
 
 ///|
@@ -395,6 +413,19 @@ test "CSV parsing preserves quotes, exact decimal precision, empty values, and d
     csv.replace(old="1.25", new="1.250"),
   )
   assert_true(bad_precision.issues.length() > 0)
+  let i64_min = parse_qc_csv(
+    program,
+    csv.replace(old="1.25", new="-92233720368547758.08"),
+  )
+  assert_true(i64_min.issues.length() == 0)
+  assert_true(
+    i64_min.runs[0].observations[0].value == -9223372036854775807L - 1L,
+  )
+  let csv_overflow = parse_qc_csv(
+    program,
+    csv.replace(old="1.25", new="92233720368547758.08"),
+  )
+  assert_true(csv_overflow.issues.length() > 0)
   let malformed = parse_qc_csv(
     program,
     csv.replace(old="\"run \"\"one\"\"\"", new="\"unfinished"),
