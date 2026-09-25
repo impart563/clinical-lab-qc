@@ -30,13 +30,92 @@ fn html_find_run(runs : Array[@run.QCRun], run_index : Int) -> @run.QCRun? {
 }
 
 ///|
+fn html_find_first_assessment(
+  trajectory : @evidence.Trajectory,
+  status : @evidence.AssessmentStatus,
+) -> Int? {
+  for index, assessment in trajectory.assessments {
+    if assessment.status == status {
+      return Some(index)
+    }
+  }
+  None
+}
+
+///|
+fn html_find_epoch_run_index(
+  runs : Array[@run.QCRun],
+  epoch : @epoch.QCEpoch,
+) -> Int? {
+  for index, run in runs {
+    if run.epoch.has_same_metadata(epoch) {
+      return Some(index)
+    }
+  }
+  None
+}
+
+///|
+fn html_find_evidence_run_index(
+  runs : Array[@run.QCRun],
+  evidence : @evidence.EvidencePoint,
+) -> Int? {
+  for index, run in runs {
+    if run.run_id == evidence.run_id &&
+      run.sequence == evidence.sequence &&
+      run.epoch.id == evidence.epoch_id {
+      return Some(index)
+    }
+  }
+  None
+}
+
+///|
+fn html_append_status_card(
+  output : StringBuilder,
+  label : String,
+  count : Int,
+  status : @evidence.AssessmentStatus,
+  trajectory : @evidence.Trajectory,
+) -> Unit {
+  output.write_string("<div class=\"card\">")
+  match html_find_first_assessment(trajectory, status) {
+    Some(index) => {
+      output.write_string("<a href=\"#run-")
+      output.write_string(index.to_string())
+      output.write_string("\">")
+    }
+    None => ()
+  }
+  output.write_string(label)
+  output.write_string("<strong>")
+  output.write_string(count.to_string())
+  output.write_string("</strong>")
+  match html_find_first_assessment(trajectory, status) {
+    Some(_) => output.write_string("</a>")
+    None => ()
+  }
+  output.write_string("</div>\n")
+}
+
+///|
 fn html_append_evidence(
   output : StringBuilder,
   evidence : @evidence.EvidencePoint,
+  runs : Array[@run.QCRun],
 ) -> Unit {
+  output.write_string("<tr><td>")
+  match html_find_evidence_run_index(runs, evidence) {
+    Some(index) => {
+      output.write_string("<a href=\"#run-")
+      output.write_string(index.to_string())
+      output.write_string("\">")
+      output.write_string(html_escape(evidence.run_id))
+      output.write_string("</a>")
+    }
+    None => output.write_string(html_escape(evidence.run_id))
+  }
   output.write_string(
-    "<tr><td>" +
-    html_escape(evidence.run_id) +
     "</td><td>" +
     html_escape(evidence.control_level_id) +
     "</td><td>" +
@@ -63,7 +142,9 @@ fn html_append_assessment(
   assessment : @evidence.RunAssessment,
   runs : Array[@run.QCRun],
 ) -> Unit {
-  output.write_string("<details class=\"run\"><summary><span class=\"badge ")
+  output.write_string("<details class=\"run\" id=\"run-")
+  output.write_string(run_index.to_string())
+  output.write_string("\"><summary><span class=\"badge ")
   output.write_string(html_status_class(assessment.status))
   output.write_string("\">")
   output.write_string(assessment.status.name())
@@ -128,7 +209,7 @@ fn html_append_assessment(
           "<table><thead><tr><th>Run</th><th>Control</th><th>Observed</th><th>Mean</th><th>SD</th><th>Threshold distance</th><th>Direction</th></tr></thead><tbody>\n",
         )
         for evidence in hit.evidence {
-          html_append_evidence(output, evidence)
+          html_append_evidence(output, evidence, runs)
         }
         output.write_string("</tbody></table>\n")
       }
@@ -183,17 +264,36 @@ pub fn render_audit_html(
     "</strong></div><div class=\"card\">Assessed runs<strong>",
   )
   output.write_string(summary.assessed_runs.to_string())
-  output.write_string("</strong></div><div class=\"card\">In control<strong>")
-  output.write_string(summary.in_control.to_string())
-  output.write_string("</strong></div><div class=\"card\">Warning<strong>")
-  output.write_string(summary.warning.to_string())
-  output.write_string(
-    "</strong></div><div class=\"card\">Requires review<strong>",
+  output.write_string("</strong></div>\n")
+  html_append_status_card(
+    output,
+    "In control",
+    summary.in_control,
+    @evidence.InControl,
+    trajectory,
   )
-  output.write_string(summary.requires_review.to_string())
-  output.write_string("</strong></div><div class=\"card\">Incomplete<strong>")
-  output.write_string(summary.incomplete.to_string())
-  output.write_string("</strong></div><div class=\"card\">Rule hits<strong>")
+  html_append_status_card(
+    output,
+    "Warning",
+    summary.warning,
+    @evidence.Warning,
+    trajectory,
+  )
+  html_append_status_card(
+    output,
+    "Requires review",
+    summary.requires_review,
+    @evidence.RequiresReview,
+    trajectory,
+  )
+  html_append_status_card(
+    output,
+    "Incomplete",
+    summary.incomplete,
+    @evidence.Incomplete,
+    trajectory,
+  )
+  output.write_string("<div class=\"card\">Rule hits<strong>")
   output.write_string(summary.total_rule_hits.to_string())
   output.write_string("</strong></div><div class=\"card\">Track issues<strong>")
   output.write_string(summary.track_issues.to_string())
@@ -263,7 +363,7 @@ pub fn render_audit_html(
     output.write_string("<p class=\"empty\">No epochs.</p>\n")
   } else {
     output.write_string(
-      "<table><thead><tr><th>Epoch</th><th>Reagent lot</th><th>Control lot</th><th>Calibration</th><th>Program version</th><th>Runs</th></tr></thead><tbody>\n",
+      "<table><thead><tr><th>Epoch</th><th>Reagent lot</th><th>Control lot</th><th>Calibration</th><th>Program version</th><th>Runs</th><th>Navigate</th></tr></thead><tbody>\n",
     )
     for entry in summary.epoch_runs {
       output.write_string("<tr><td>")
@@ -278,6 +378,15 @@ pub fn render_audit_html(
       output.write_string(html_escape(entry.epoch.program_version))
       output.write_string("</td><td>")
       output.write_string(entry.count.to_string())
+      output.write_string("</td><td>")
+      match html_find_epoch_run_index(runs, entry.epoch) {
+        Some(index) => {
+          output.write_string("<a href=\"#run-")
+          output.write_string(index.to_string())
+          output.write_string("\">Open first run</a>")
+        }
+        None => output.write_string("No run detail")
+      }
       output.write_string("</td></tr>\n")
     }
     output.write_string("</tbody></table>\n")

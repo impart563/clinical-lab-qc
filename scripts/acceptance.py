@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -137,6 +138,13 @@ def verify_scenario(name: str) -> None:
     require('<svg xmlns="http://www.w3.org/2000/svg"' in html_report, f"{name}: embedded SVG missing")
     require('class="control-panel"' in html_report, f"{name}: embedded chart panels missing")
     require("Run assessments" in html_report, f"{name}: run details missing")
+    run_targets = set(re.findall(r'<details class="run" id="([^"]+)"', html_report))
+    run_links = re.findall(r'href="#([^"]+)"', html_report)
+    require(len(run_targets) == 12, f"{name}: expected one HTML anchor per assessment")
+    require(
+        all(target in run_targets for target in run_links),
+        f"{name}: an HTML navigation link does not resolve to a run",
+    )
     require("<script" not in html_report.lower(), f"{name}: report unexpectedly contains a script")
     require("<link" not in html_report.lower(), f"{name}: report unexpectedly links an external resource")
     require("https://" not in html_report.lower(), f"{name}: report unexpectedly references an external URL")

@@ -12,7 +12,7 @@
 | 参赛者能解释技术选择与质量 | docs/design-decisions.md、源码、测试和公开 API 接口 | 说明整数精度、阶段重置、缺失值、证据与报告生成 |
 | 项目验收材料可复现 | 源码、README、测试和三个演示场景 | **python scripts/acceptance.py** |
 
-验收脚本会检查所有支持的 MoonBit 目标，构建 native CLI，运行测试和公开 quickstart；对三个演示场景核对预期结果；重复运行 Markdown、JSON、CSV、SVG、HTML 并比较输出；检查 JSON/CSV/HTML 统计一致性、HTML 内嵌 SVG 可解析且无外部资源、CSV 预检文本和 JSON 结果、行列诊断、缺失控制警告、质控信号与输入有效性的分离、CLI 错误处理，最后构建 Moon package 归档。
+验收脚本会检查所有支持的 MoonBit 目标，构建 native CLI，运行测试和公开 quickstart；对三个演示场景核对预期结果；重复运行 Markdown、JSON、CSV、SVG、HTML 并比较输出；检查 JSON/CSV/HTML 统计一致性、HTML 内嵌 SVG 可解析且无外部资源、状态/阶段/证据导航链接均指向运行记录、CSV 预检文本和 JSON 结果、行列诊断、缺失控制警告、质控信号与输入有效性的分离、CLI 错误处理，最后构建 Moon package 归档。
 
 当前公开的黑客松页面没有列出提交数量下限或 Mooncakes 发布要求。项目计划书引用的飞书章程提到了这些更严格条件，应先向赛事群核实再将其当作硬门槛。OSC2026 是另一场赛事，其要求不能自动套用到本场。
 
