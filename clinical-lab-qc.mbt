@@ -80,6 +80,8 @@ pub using @replay {evaluate_run, replay_track}
 ///|
 pub using @io {
   type CsvParseResult,
+  type ProgramConfigResult,
+  parse_assay_program_json,
   parse_qc_csv,
   render_trajectory_markdown,
   render_trajectory_json,

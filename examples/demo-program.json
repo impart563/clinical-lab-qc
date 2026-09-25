@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "assay_id": "synthetic-analyte",
+  "unit": "unit/L",
+  "precision": 0,
+  "levels": [
+    {
+      "id": "L1",
+      "mean": "100",
+      "standard_deviation": "10",
+      "required": true
+    },
+    {
+      "id": "L2",
+      "mean": "200",
+      "standard_deviation": "20",
+      "required": true
+    }
+  ],
+  "rules": [
+    { "rule": "1_2s", "disposition": "warning" },
+    { "rule": "1_3s", "disposition": "requires_review" },
+    { "rule": "2_2s", "disposition": "requires_review" },
+    { "rule": "R_4s", "disposition": "requires_review" },
+    { "rule": "4_1s", "disposition": "requires_review" },
+    { "rule": "10x", "disposition": "requires_review" }
+  ]
+}

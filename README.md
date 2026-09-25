@@ -14,6 +14,8 @@ moon run --target native cmd/demo -- --scenario step-shift
 moon run --target native cmd/demo -- --scenario gradual-drift
 moon run --target native cmd/demo -- --scenario gradual-drift --format json
 moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format json
+moon run --target native cmd/demo -- --program examples/demo-program.json --check-program
+moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format json
 moon run --target native examples/quickstart
 ```
 
@@ -23,11 +25,14 @@ The default Markdown output lists the run status, each triggered rule, the evide
 - `step-shift` shows two QC epochs. The new lot and calibration start fresh rule windows.
 - `gradual-drift` shows consecutive-run signals and the points that support them.
 - `--input` replays a long-form CSV using the demo assay program. CSV files with parse issues fail with a nonzero process status.
+- `--program` loads a custom assay profile from versioned JSON; combine it with `--input` to replay the CSV using that profile. `--check-program` validates a profile without replaying data.
 - `examples/quickstart` is a small downstream-style program that constructs the public API types and calls `replay_track`.
+
+Assay profile JSON uses `schema_version: 1`; unknown fields are rejected. Control `mean` and `standard_deviation` values are decimal strings (for example, `"100.25"`) so they are converted exactly at the declared precision. Rule names are `1_2s`, `1_3s`, `2_2s`, `R_4s`, `4_1s`, and `10x`; dispositions are `disabled`, `warning`, or `requires_review`. Rules omitted from the `rules` array keep their built-in default dispositions. See [the example profile](examples/demo-program.json). The public parser is `parse_assay_program_json`.
 
 ## Public API
 
-The root package exports `validate_program`, `evaluate_run`, and `replay_track`, plus the domain types `AssayProgram`, `QCEpoch`, `QCRun`, `ControlPoint`, `RuleHit`, `RunAssessment`, and `Trajectory`.
+The root package exports `validate_program`, `parse_assay_program_json`, `evaluate_run`, and `replay_track`, plus the domain types `AssayProgram`, `QCEpoch`, `QCRun`, `ControlPoint`, `RuleHit`, `RunAssessment`, and `Trajectory`.
 
 The compiled [quickstart example](examples/quickstart/main.mbt) shows the complete API path: configure an assay and QC epoch, construct ordered runs, replay them, and render a report. Exact rule windows and implementation limits are documented in [Rule semantics](docs/rule-semantics.md).
 

@@ -20,6 +20,8 @@ pub fn disposition_warning() -> @assay.RuleDisposition
 
 pub fn evaluate_run(@assay.AssayProgram, @run.QCRun, Array[@run.QCRun]) -> @evidence.RunAssessment
 
+pub fn parse_assay_program_json(String) -> @io.ProgramConfigResult
+
 pub fn parse_qc_csv(@assay.AssayProgram, String) -> @io.CsvParseResult
 
 pub fn render_trajectory_json(@evidence.Trajectory) -> String
@@ -64,6 +66,8 @@ pub using @evidence {type EvidencePoint}
 pub using @evidence {type InputIssue}
 
 pub using @evidence {type InputIssueCode}
+
+pub using @io {type ProgramConfigResult}
 
 pub using @epoch {type QCEpoch}
 

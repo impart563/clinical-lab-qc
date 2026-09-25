@@ -3,4 +3,5 @@ import {
   "impart563/clinical-lab-qc/epoch",
   "impart563/clinical-lab-qc/run",
   "impart563/clinical-lab-qc/evidence",
+  "moonbitlang/core/json",
 }

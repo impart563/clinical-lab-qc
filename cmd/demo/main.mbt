@@ -3,6 +3,8 @@ priv struct CliOptions {
   scenario : String
   format : String
   input_path : String?
+  program_path : String?
+  check_program : Bool
 }
 
 ///|
@@ -19,7 +21,14 @@ fn[T] cli_error(message : String) -> T {
 fn cli_command() -> @argparse.Command {
   @argparse.Command(
     "clinical-lab-qc",
-    about="Replay synthetic QC scenarios or a long-form QC CSV file.",
+    about="Replay QC data or validate a versioned assay program.",
+    flags=[
+      @argparse.FlagArg(
+        "check-program",
+        action=@argparse.SetTrue,
+        about="validate the selected program and exit",
+      ),
+    ],
     options=[
       @argparse.OptionArg(
         "scenario",
@@ -27,6 +36,10 @@ fn cli_command() -> @argparse.Command {
         about="demo scenario: stable, step-shift, or gradual-drift",
       ),
       @argparse.OptionArg("input", about="path to a long-form QC CSV file"),
+      @argparse.OptionArg(
+        "program",
+        about="path to a versioned JSON assay program",
+      ),
       @argparse.OptionArg(
         "format",
         default_values=["markdown"],
@@ -53,6 +66,11 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
     Some(values) if values.length() == 1 => Some(values[0])
     _ => None
   }
+  let program_path = match matches.values.get("program") {
+    Some(values) if values.length() == 1 => Some(values[0])
+    _ => None
+  }
+  let check_program = matches.flags.get("check-program") == Some(true)
   if format != "markdown" && format != "text" && format != "json" {
     return Err("unknown format '" + format + "'; choose markdown or json")
   }
@@ -70,7 +88,19 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
       "'; choose stable, step-shift, or gradual-drift",
     )
   }
-  Ok({ scenario, format, input_path })
+  if check_program && program_path is None {
+    return Err("--check-program requires --program <path>")
+  }
+  if check_program && input_path is Some(_) {
+    return Err("--check-program cannot be combined with --input")
+  }
+  if program_path is Some(_) && input_path is None && !check_program {
+    return Err("--program requires --input or --check-program")
+  }
+  if check_program && matches.sources.get("scenario") is Some(@argparse.Argv) {
+    return Err("--check-program cannot be combined with --scenario")
+  }
+  Ok({ scenario, format, input_path, program_path, check_program })
 }
 
 ///|
@@ -86,6 +116,34 @@ fn csv_issues_message(issues : Array[@lib.InputIssue]) -> String {
     message.write_string(issue.message)
   }
   message.to_string()
+}
+
+///|
+fn program_issues_message(issues : Array[String]) -> String {
+  let message = StringBuilder()
+  message.write_string("program configuration has ")
+  message.write_string(issues.length().to_string())
+  message.write_string(" issue(s):")
+  for issue in issues {
+    message.write_string("\n- ")
+    message.write_string(issue)
+  }
+  message.to_string()
+}
+
+///|
+async fn load_program(path : String) -> @lib.AssayProgram {
+  let text = @fs.read_file(path).text() catch {
+    _ => cli_error("unable to read program configuration '" + path + "'")
+  }
+  let parsed = @lib.parse_assay_program_json(text)
+  if parsed.issues.length() > 0 {
+    cli_error(program_issues_message(parsed.issues))
+  }
+  match parsed.program {
+    Some(program) => program
+    None => cli_error("program configuration is invalid")
+  }
 }
 
 ///|
@@ -111,7 +169,22 @@ async fn main {
     Ok(value) => value
     Err(message) => cli_error(message)
   }
-  let program = @scenarios.demo_program()
+  let program = match options.program_path {
+    Some(path) => load_program(path)
+    None => @scenarios.demo_program()
+  }
+  if options.check_program {
+    println(
+      "valid: " +
+      program.assay_id +
+      " (" +
+      program.levels.length().to_string() +
+      " control levels, precision " +
+      program.precision.to_string() +
+      ")",
+    )
+    return
+  }
   let runs = match options.input_path {
     Some(path) => {
       let csv_text = @fs.read_file(path).text() catch {

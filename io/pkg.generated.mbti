@@ -9,6 +9,8 @@ import {
 }
 
 // Values
+pub fn parse_assay_program_json(String) -> ProgramConfigResult
+
 pub fn parse_qc_csv(@assay.AssayProgram, String) -> CsvParseResult
 
 pub fn render_trajectory_json(@evidence.Trajectory) -> String
@@ -21,6 +23,11 @@ pub fn render_trajectory_markdown(@evidence.Trajectory) -> String
 pub(all) struct CsvParseResult {
   runs : Array[@run.QCRun]
   issues : Array[@evidence.InputIssue]
+} derive(@debug.Debug)
+
+pub(all) struct ProgramConfigResult {
+  program : @assay.AssayProgram?
+  issues : Array[String]
 } derive(@debug.Debug)
 
 // Type aliases
