@@ -17,55 +17,7 @@ jobs:
         run: |
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
-      - name: Check all targets
-        run: moon check --deny-warn --target all
-      - name: Build native CLI
-        run: moon build --target native cmd/demo
-      - name: Test all targets
-        run: moon test --deny-warn --target all
-      - name: Build public API quickstart
-        run: moon run --target native examples/quickstart
-      - name: Replay synthetic CSV input
-        run: moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format json
-      - name: Validate custom assay program
-        run: moon run --target native cmd/demo -- --program examples/demo-program.json --check-program
-      - name: Replay CSV with custom assay program
-        run: moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format json
-      - name: Verify audit JSON and CSV exports
-        run: |
-          json_report=$(moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format json)
-          printf '%s' "$json_report" | python -c 'import json,sys; r=json.load(sys.stdin); assert r["schema_version"] == 1; assert r["summary"]["assessed_runs"] == 3; assert len(r["epochs"]) == 1'
-          csv_report=$(moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format csv)
-          printf '%s\n' "$csv_report" | python -c 'import csv,sys; rows=list(csv.DictReader(sys.stdin)); assert len(rows) == 9; assert sum(row["record_type"] == "assessment" for row in rows) == 3; assert sum(row["record_type"] == "observation" for row in rows) == 6'
-      - name: Verify offline SVG chart output
-        run: |
-          drift_chart="$RUNNER_TEMP/clinical-lab-qc-drift.svg"
-          epoch_chart="$RUNNER_TEMP/clinical-lab-qc-epochs.svg"
-          moon run --target native cmd/demo -- --scenario gradual-drift --format svg > "$drift_chart"
-          moon run --target native cmd/demo -- --scenario step-shift --format svg > "$epoch_chart"
-          grep -q '<svg xmlns="http://www.w3.org/2000/svg"' "$drift_chart"
-          grep -q 'class="rule-evidence"' "$drift_chart"
-          grep -q 'class="epoch-boundary"' "$epoch_chart"
-      - name: Run deterministic demos
-        run: |
-          moon run --target native cmd/demo -- --scenario stable
-          moon run --target native cmd/demo -- --scenario step-shift
-          moon run --target native cmd/demo -- --scenario gradual-drift
-      - name: Reject invalid CLI options
-        run: |
-          if output=$(moon run --target native cmd/demo -- --format yaml 2>&1); then
-            echo "Expected an invalid format to fail" >&2
-            exit 1
-          fi
-          echo "$output" | grep -q "unknown format 'yaml'"
-      - name: Reject malformed CSV input
-        run: |
-          bad_csv="$RUNNER_TEMP/clinical-lab-qc-invalid.csv"
-          printf 'not-a-qc-csv\n' > "$bad_csv"
-          if output=$(moon run --target native cmd/demo -- --input "$bad_csv" 2>&1); then
-            echo "Expected malformed CSV to fail" >&2
-            exit 1
-          fi
-          echo "$output" | grep -q "CSV input has 1 issue"
-      - name: Build Moon package archive
-        run: moon package
+      - name: Record MoonBit toolchain
+        run: moon version
+      - name: Run reproducible acceptance checks
+        run: python scripts/acceptance.py
