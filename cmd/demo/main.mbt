@@ -43,7 +43,7 @@ fn cli_command() -> @argparse.Command {
       @argparse.OptionArg(
         "format",
         default_values=["markdown"],
-        about="output format: markdown or json",
+        about="output format: markdown, json, or csv",
       ),
     ],
   )
@@ -71,8 +71,11 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
     _ => None
   }
   let check_program = matches.flags.get("check-program") == Some(true)
-  if format != "markdown" && format != "text" && format != "json" {
-    return Err("unknown format '" + format + "'; choose markdown or json")
+  if format != "markdown" &&
+    format != "text" &&
+    format != "json" &&
+    format != "csv" {
+    return Err("unknown format '" + format + "'; choose markdown, json, or csv")
   }
   if input_path is Some(_) &&
     matches.sources.get("scenario") is Some(@argparse.Argv) {
@@ -203,10 +206,10 @@ async fn main {
       }
   }
   let trajectory = @lib.replay_track(program, runs)
-  let output = if options.format == "json" {
-    @lib.render_trajectory_json(trajectory)
-  } else {
-    @lib.render_trajectory_markdown(trajectory)
+  let output = match options.format {
+    "json" => @lib.render_audit_json(program, runs, trajectory)
+    "csv" => @lib.render_audit_csv(program, runs, trajectory)
+    _ => @lib.render_audit_markdown(program, runs, trajectory)
   }
   println(output)
   if has_fatal_trajectory_issue(trajectory) {

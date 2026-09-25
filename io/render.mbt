@@ -107,9 +107,10 @@ pub fn render_trajectory_json(trajectory : @evidence.Trajectory) -> String {
 }
 
 ///|
-pub fn render_trajectory_markdown(trajectory : @evidence.Trajectory) -> String {
+fn render_assessment_details_markdown(
+  trajectory : @evidence.Trajectory,
+) -> String {
   let output = StringBuilder()
-  output.write_string("# QC replay\n\n")
   for assessment in trajectory.assessments {
     output.write_string("## Run ")
     output.write_string(assessment.run_id)
@@ -168,4 +169,9 @@ pub fn render_trajectory_markdown(trajectory : @evidence.Trajectory) -> String {
     output.write_string("\n")
   }
   output.to_string()
+}
+
+///|
+pub fn render_trajectory_markdown(trajectory : @evidence.Trajectory) -> String {
+  "# QC replay\n\n" + render_assessment_details_markdown(trajectory)
 }

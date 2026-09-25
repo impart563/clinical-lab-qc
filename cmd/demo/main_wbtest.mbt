@@ -25,6 +25,14 @@ test "CLI accepts a CSV path and JSON format" {
 }
 
 ///|
+test "CLI accepts CSV report output" {
+  match parse_cli_args(["--scenario", "stable", "--format", "csv"]) {
+    Ok(options) => assert_true(options.format == "csv")
+    Err(_) => fail("CSV report format should parse")
+  }
+}
+
+///|
 test "CLI accepts a program for validation or CSV replay" {
   match
     parse_cli_args([

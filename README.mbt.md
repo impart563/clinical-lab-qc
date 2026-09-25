@@ -14,18 +14,20 @@ moon run --target native cmd/demo -- --scenario step-shift
 moon run --target native cmd/demo -- --scenario gradual-drift
 moon run --target native cmd/demo -- --scenario gradual-drift --format json
 moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format json
+moon run --target native cmd/demo -- --input examples/synthetic-iqc.csv --format csv
 moon run --target native cmd/demo -- --program examples/demo-program.json --check-program
 moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format json
 moon run --target native examples/quickstart
 ```
 
-The default Markdown output lists the run status, each triggered rule, the evidence points, comparison distances, and input issues. JSON output uses exact integer values and a fixed field order. Replaying the same scenario produces the same output.
+The default Markdown output starts with track totals and then lists each run, triggered rule, evidence point, comparison distance, and input issue. JSON output is a deterministic `schema_version: 1` audit envelope with the program, original runs and observations, epoch snapshots, assessments, issues, and summary counts. CSV output is a detail table with typed `assessment`, `observation`, `evidence`, `input_issue`, and `track_issue` rows; scaled measurement columns remain integer strings and include their precision.
 
 - `stable` shows a stable synthetic track without rule hits.
 - `step-shift` shows two QC epochs. The new lot and calibration start fresh rule windows.
 - `gradual-drift` shows consecutive-run signals and the points that support them.
 - `--input` replays a long-form CSV using the demo assay program. CSV files with parse issues fail with a nonzero process status.
 - `--program` loads a custom assay profile from versioned JSON; combine it with `--input` to replay the CSV using that profile. `--check-program` validates a profile without replaying data.
+- `--format csv` exports the audit details as a result table; `--format json` includes status, rule-hit, and epoch-run summaries.
 - `examples/quickstart` is a small downstream-style program that constructs the public API types and calls `replay_track`.
 
 Assay profile JSON uses `schema_version: 1`; unknown fields are rejected. Control `mean` and `standard_deviation` values are decimal strings (for example, `"100.25"`) so they are converted exactly at the declared precision. Rule names are `1_2s`, `1_3s`, `2_2s`, `R_4s`, `4_1s`, and `10x`; dispositions are `disabled`, `warning`, or `requires_review`. Rules omitted from the `rules` array keep their built-in default dispositions. See [the example profile](examples/demo-program.json). The public parser is `parse_assay_program_json`.
@@ -65,7 +67,7 @@ moon test --target all
 moon package
 ```
 
-The CI also denies compiler warnings, runs the CSV CLI and quickstart, and checks the package artifact. The tests cover strict threshold boundaries, all six rules, stage isolation, missing-value window resets, input validation, overflow reporting, CSV parsing, stable JSON, and all demo scenarios.
+The CI also denies compiler warnings, checks custom-program preflight and replay, verifies the audit JSON/CSV outputs, runs the quickstart, and checks the package artifact. The tests cover strict threshold boundaries, all six rules, stage isolation, missing-value window resets, input validation, overflow reporting, CSV parsing and escaping, stable versioned reports, and all demo scenarios.
 
 ## License
 

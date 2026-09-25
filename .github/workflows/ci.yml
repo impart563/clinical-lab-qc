@@ -31,6 +31,12 @@ jobs:
         run: moon run --target native cmd/demo -- --program examples/demo-program.json --check-program
       - name: Replay CSV with custom assay program
         run: moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format json
+      - name: Verify audit JSON and CSV exports
+        run: |
+          json_report=$(moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format json)
+          printf '%s' "$json_report" | python -c 'import json,sys; r=json.load(sys.stdin); assert r["schema_version"] == 1; assert r["summary"]["assessed_runs"] == 3; assert len(r["epochs"]) == 1'
+          csv_report=$(moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format csv)
+          printf '%s\n' "$csv_report" | python -c 'import csv,sys; rows=list(csv.DictReader(sys.stdin)); assert len(rows) == 9; assert sum(row["record_type"] == "assessment" for row in rows) == 3; assert sum(row["record_type"] == "observation" for row in rows) == 6'
       - name: Run deterministic demos
         run: |
           moon run --target native cmd/demo -- --scenario stable
