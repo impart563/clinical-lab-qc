@@ -48,7 +48,7 @@ def require(condition: bool, message: str) -> None:
 def verify_scenario(name: str) -> None:
     print(f"Verify scenario: {name}")
     outputs: dict[str, str] = {}
-    for output_format in ("markdown", "json", "csv", "svg"):
+    for output_format in ("markdown", "json", "csv", "svg", "html"):
         args = [
             "moon",
             "run",
@@ -131,6 +131,30 @@ def verify_scenario(name: str) -> None:
         f"{name}: unexpected SVG rule evidence markers",
     )
 
+    html_report = outputs["html"]
+    require(html_report.startswith("<!doctype html>"), f"{name}: HTML doctype missing")
+    require('<html lang="en">' in html_report, f"{name}: HTML language missing")
+    require('<svg xmlns="http://www.w3.org/2000/svg"' in html_report, f"{name}: embedded SVG missing")
+    require('class="control-panel"' in html_report, f"{name}: embedded chart panels missing")
+    require("Run assessments" in html_report, f"{name}: run details missing")
+    require("<script" not in html_report.lower(), f"{name}: report unexpectedly contains a script")
+    require("<link" not in html_report.lower(), f"{name}: report unexpectedly links an external resource")
+    require("https://" not in html_report.lower(), f"{name}: report unexpectedly references an external URL")
+    svg_start = html_report.find("<svg ")
+    svg_end = html_report.find("</svg>", svg_start) + len("</svg>")
+    require(svg_start >= 0 and svg_end > svg_start, f"{name}: embedded SVG is incomplete")
+    ET.fromstring(html_report[svg_start:svg_end])
+    for status, label in (
+        ("InControl", "In control"),
+        ("Warning", "Warning"),
+        ("RequiresReview", "Requires review"),
+        ("Incomplete", "Incomplete"),
+    ):
+        require(
+            f"{label}<strong>{status_counts.get(status, 0)}</strong>" in html_report,
+            f"{name}: HTML and JSON {status} counts disagree",
+        )
+
     require("# QC replay" in outputs["markdown"], f"{name}: Markdown report header missing")
     require("Track issues: 0" in outputs["markdown"], f"{name}: Markdown reports a track issue")
     if name == "stable":
@@ -145,6 +169,7 @@ def verify_scenario(name: str) -> None:
             "gradual-drift: Markdown status summary changed",
         )
         require("Rule hits: 1_2s 1, 4_1s 6, 10x 2" in outputs["markdown"], "gradual-drift: rule summary changed")
+        require("Rule signals and evidence" in html_report, "gradual-drift: HTML evidence details missing")
 
 
 def main() -> int:

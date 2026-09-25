@@ -26,6 +26,8 @@ pub fn parse_qc_csv(@assay.AssayProgram, String) -> @io.CsvParseResult
 
 pub fn render_audit_csv(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
+pub fn render_audit_html(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
+
 pub fn render_audit_json(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
 pub fn render_audit_markdown(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String

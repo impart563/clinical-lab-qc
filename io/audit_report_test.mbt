@@ -149,3 +149,107 @@ test "audit CSV preserves quoted identifiers and emits assessment evidence and s
   assert_true(markdown.contains("lot,\"a\" 2 run(s)"))
   assert_true(markdown.contains("lot-b 1 run(s)"))
 }
+
+///|
+test "offline HTML audit report is deterministic and combines summary chart and evidence" {
+  let program = audit_test_program()
+  let runs = audit_test_runs()
+  let trajectory = audit_test_trajectory()
+  let html = render_audit_html(program, runs, trajectory)
+  assert_eq(html, render_audit_html(program, runs, trajectory))
+  assert_true(html.has_prefix("<!doctype html>"))
+  assert_true(html.contains("<html lang=\"en\">"))
+  assert_true(html.contains("Offline QC audit report · schema version 1"))
+  assert_true(html.contains("Input runs<strong>3</strong>"))
+  assert_true(html.contains("Warning<strong>1</strong>"))
+  assert_true(html.contains("Rule signals and evidence"))
+  assert_true(html.contains("test warning signal"))
+  assert_true(html.contains("102.01 unit/L"))
+  assert_true(html.contains("lot-b"))
+  assert_true(html.contains("<svg xmlns=\"http://www.w3.org/2000/svg\""))
+  assert_true(html.contains("class=\"control-panel\""))
+  assert_true(!html.contains("<script"))
+  assert_true(!html.contains("<link"))
+  assert_true(!html.contains("https://"))
+}
+
+///|
+test "HTML escaping protects report text and quoted values" {
+  let dangerous = "<script>alert('x') & \"y\"</script>"
+  let base = audit_test_program()
+  let program : @assay.AssayProgram = {
+    assay_id: dangerous,
+    unit: "unit<&",
+    precision: base.precision,
+    levels: base.levels,
+    rule_policies: base.rule_policies,
+  }
+  let epoch : @epoch.QCEpoch = {
+    id: dangerous,
+    reagent_lot: "reagent-a",
+    control_lot: "control-a",
+    calibration_id: "cal-a",
+    program_version: "v1",
+  }
+  let runs : Array[@run.QCRun] = [
+    {
+      run_id: dangerous,
+      epoch,
+      sequence: 1L,
+      timestamp: "2026-09-27T08:00:00Z",
+      observations: [{ control_level_id: "L1", value: 10000L, precision: 2 }],
+    },
+  ]
+  let trajectory : @evidence.Trajectory = { assessments: [], input_issues: [] }
+  let html = render_audit_html(program, runs, trajectory)
+  assert_true(
+    html.contains(
+      "&lt;script&gt;alert(&#39;x&#39;) &amp; &quot;y&quot;&lt;/script&gt;",
+    ),
+  )
+  assert_true(html.contains("unit&lt;&amp;"))
+  assert_true(!html.contains(dangerous))
+  assert_true(!html.contains("<script>alert"))
+}
+
+///|
+test "HTML run details preserve positional snapshots through an invalid duplicate" {
+  let program = audit_test_program()
+  let first = audit_test_runs()[0]
+  let duplicate : @run.QCRun = {
+    run_id: first.run_id,
+    epoch: first.epoch,
+    sequence: first.sequence,
+    timestamp: "duplicate timestamp",
+    observations: [{ control_level_id: "L1", value: 12345L, precision: 2 }],
+  }
+  let runs = [first, duplicate]
+  let duplicate_issue : @evidence.InputIssue = {
+    code: @evidence.DuplicateRunId,
+    run_id: Some(first.run_id),
+    message: "duplicate run id in track",
+  }
+  let trajectory : @evidence.Trajectory = {
+    assessments: [
+      {
+        run_id: first.run_id,
+        sequence: first.sequence,
+        status: @evidence.InControl,
+        hits: [],
+        input_issues: [],
+      },
+      {
+        run_id: duplicate.run_id,
+        sequence: duplicate.sequence,
+        status: @evidence.Incomplete,
+        hits: [],
+        input_issues: [duplicate_issue],
+      },
+    ],
+    input_issues: [duplicate_issue],
+  }
+  let html = render_audit_html(program, runs, trajectory)
+  assert_true(html.contains("123.45 unit/L"))
+  assert_true(html.contains("duplicate timestamp"))
+  assert_true(html.contains("duplicate run id in track"))
+}

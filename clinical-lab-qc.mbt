@@ -84,6 +84,7 @@ pub using @io {
   parse_assay_program_json,
   parse_qc_csv,
   render_audit_csv,
+  render_audit_html,
   render_audit_json,
   render_audit_markdown,
   render_levey_jennings_svg,

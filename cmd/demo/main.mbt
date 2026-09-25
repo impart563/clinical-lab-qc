@@ -43,7 +43,7 @@ fn cli_command() -> @argparse.Command {
       @argparse.OptionArg(
         "format",
         default_values=["markdown"],
-        about="output format: markdown, json, csv, or svg",
+        about="output format: markdown, json, csv, svg, or html",
       ),
     ],
   )
@@ -75,9 +75,12 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
     format != "text" &&
     format != "json" &&
     format != "csv" &&
-    format != "svg" {
+    format != "svg" &&
+    format != "html" {
     return Err(
-      "unknown format '" + format + "'; choose markdown, json, csv, or svg",
+      "unknown format '" +
+      format +
+      "'; choose markdown, json, csv, svg, or html",
     )
   }
   if input_path is Some(_) &&
@@ -213,6 +216,7 @@ async fn main {
     "json" => @lib.render_audit_json(program, runs, trajectory)
     "csv" => @lib.render_audit_csv(program, runs, trajectory)
     "svg" => @lib.render_levey_jennings_svg(program, runs, trajectory)
+    "html" => @lib.render_audit_html(program, runs, trajectory)
     _ => @lib.render_audit_markdown(program, runs, trajectory)
   }
   println(output)
