@@ -22,6 +22,32 @@ priv struct ControlRuleHitCount {
 }
 
 ///|
+priv struct EpochRuleHitCount {
+  epoch : @epoch.QCEpoch
+  rule : @assay.Rule
+  count : Int
+}
+
+///|
+priv struct EpochControlRuleHitCount {
+  epoch : @epoch.QCEpoch
+  control_level_id : String
+  rule : @assay.Rule
+  count : Int
+}
+
+///|
+priv struct ControlCoverageCount {
+  epoch : @epoch.QCEpoch
+  control_level_id : String
+  required : Bool
+  expected_runs : Int
+  observed_runs : Int
+  missing_runs : Int
+  precision_mismatch_runs : Int
+}
+
+///|
 priv struct AuditSummary {
   input_runs : Int
   assessed_runs : Int
@@ -33,6 +59,14 @@ priv struct AuditSummary {
   rule_hits : Array[RuleHitCount]
   epoch_runs : Array[EpochRunCount]
   control_rule_hits : Array[ControlRuleHitCount]
+  epoch_rule_hits : Array[EpochRuleHitCount]
+  epoch_control_rule_hits : Array[EpochControlRuleHitCount]
+  control_coverage : Array[ControlCoverageCount]
+  expected_control_observations : Int
+  observed_control_observations : Int
+  missing_control_observations : Int
+  precision_mismatch_control_observations : Int
+  required_missing_control_observations : Int
   track_issues : Int
 }
 
@@ -58,7 +92,74 @@ fn audit_rule_disposition_name(disposition : @assay.RuleDisposition) -> String {
 }
 
 ///|
+fn audit_increment_epoch_rule_hit(
+  counts : Array[EpochRuleHitCount],
+  epoch : @epoch.QCEpoch,
+  rule : @assay.Rule,
+) -> Unit {
+  let mut match_index : Int? = None
+  for index, entry in counts {
+    if entry.epoch.has_same_metadata(epoch) && entry.rule == rule {
+      match_index = Some(index)
+      break
+    }
+  }
+  match match_index {
+    Some(index) =>
+      counts[index] = {
+        epoch: counts[index].epoch,
+        rule: counts[index].rule,
+        count: counts[index].count + 1,
+      }
+    None => counts.push({ epoch, rule, count: 1 })
+  }
+}
+
+///|
+fn audit_increment_epoch_control_rule_hit(
+  counts : Array[EpochControlRuleHitCount],
+  epoch : @epoch.QCEpoch,
+  control_level_id : String,
+  rule : @assay.Rule,
+) -> Unit {
+  let mut match_index : Int? = None
+  for index, entry in counts {
+    if entry.epoch.has_same_metadata(epoch) &&
+      entry.control_level_id == control_level_id &&
+      entry.rule == rule {
+      match_index = Some(index)
+      break
+    }
+  }
+  match match_index {
+    Some(index) =>
+      counts[index] = {
+        epoch: counts[index].epoch,
+        control_level_id: counts[index].control_level_id,
+        rule: counts[index].rule,
+        count: counts[index].count + 1,
+      }
+    None => counts.push({ epoch, control_level_id, rule, count: 1 })
+  }
+}
+
+///|
+fn audit_epoch_total_rule_hits(
+  counts : Array[EpochRuleHitCount],
+  epoch : @epoch.QCEpoch,
+) -> Int {
+  let mut total = 0
+  for entry in counts {
+    if entry.epoch.has_same_metadata(epoch) {
+      total = total + entry.count
+    }
+  }
+  total
+}
+
+///|
 fn audit_summary(
+  program : @assay.AssayProgram,
   runs : Array[@run.QCRun],
   trajectory : @evidence.Trajectory,
 ) -> AuditSummary {
@@ -162,6 +263,83 @@ fn audit_summary(
       }
     }
   }
+  let epoch_rule_hits : Array[EpochRuleHitCount] = []
+  let epoch_control_rule_hits : Array[EpochControlRuleHitCount] = []
+  for assessment_index, assessment in trajectory.assessments {
+    match runs.get(assessment_index) {
+      Some(run) =>
+        for hit in assessment.hits {
+          audit_increment_epoch_rule_hit(epoch_rule_hits, run.epoch, hit.rule)
+          let levels : Array[String] = []
+          for point in hit.evidence {
+            if !contains_level(levels, point.control_level_id) {
+              levels.push(point.control_level_id)
+            }
+          }
+          for level_id in levels {
+            audit_increment_epoch_control_rule_hit(
+              epoch_control_rule_hits,
+              run.epoch,
+              level_id,
+              hit.rule,
+            )
+          }
+        }
+      None => ()
+    }
+  }
+  let control_coverage : Array[ControlCoverageCount] = []
+  for epoch_entry in epochs {
+    for level in program.levels {
+      let mut observed_runs = 0
+      let mut missing_runs = 0
+      let mut precision_mismatch_runs = 0
+      for run in runs {
+        if run.epoch.has_same_metadata(epoch_entry.epoch) {
+          let mut point : @run.ControlPoint? = None
+          for observation in run.observations {
+            if observation.control_level_id == level.id && point is None {
+              point = Some(observation)
+            }
+          }
+          match point {
+            Some(observation) if observation.precision != program.precision =>
+              precision_mismatch_runs = precision_mismatch_runs + 1
+            Some(_) => observed_runs = observed_runs + 1
+            None => missing_runs = missing_runs + 1
+          }
+        }
+      }
+      control_coverage.push({
+        epoch: epoch_entry.epoch,
+        control_level_id: level.id,
+        required: level.required,
+        expected_runs: epoch_entry.count,
+        observed_runs,
+        missing_runs,
+        precision_mismatch_runs,
+      })
+    }
+  }
+  let mut expected_control_observations = 0
+  let mut observed_control_observations = 0
+  let mut missing_control_observations = 0
+  let mut precision_mismatch_control_observations = 0
+  let mut required_missing_control_observations = 0
+  for coverage in control_coverage {
+    expected_control_observations = expected_control_observations +
+      coverage.expected_runs
+    observed_control_observations = observed_control_observations +
+      coverage.observed_runs
+    missing_control_observations = missing_control_observations +
+      coverage.missing_runs
+    precision_mismatch_control_observations = precision_mismatch_control_observations +
+      coverage.precision_mismatch_runs
+    if coverage.required {
+      required_missing_control_observations = required_missing_control_observations +
+        coverage.missing_runs
+    }
+  }
   {
     input_runs: runs.length(),
     assessed_runs: trajectory.assessments.length(),
@@ -173,6 +351,14 @@ fn audit_summary(
     rule_hits,
     epoch_runs: epochs,
     control_rule_hits,
+    epoch_rule_hits,
+    epoch_control_rule_hits,
+    control_coverage,
+    expected_control_observations,
+    observed_control_observations,
+    missing_control_observations,
+    precision_mismatch_control_observations,
+    required_missing_control_observations,
     track_issues: trajectory.input_issues.length(),
   }
 }
@@ -239,6 +425,45 @@ fn audit_json_program(program : @assay.AssayProgram) -> Json {
 }
 
 ///|
+fn audit_json_epoch_rule_hits(
+  summary : AuditSummary,
+  epoch : @epoch.QCEpoch,
+) -> Json {
+  let hits : Array[Json] = []
+  for entry in summary.epoch_rule_hits {
+    if entry.epoch.has_same_metadata(epoch) {
+      hits.push(
+        Json::object({
+          "rule": Json::string(entry.rule.name()),
+          "count": Json::number(entry.count.to_double()),
+        }),
+      )
+    }
+  }
+  Json::array(hits)
+}
+
+///|
+fn audit_json_epoch_control_rule_hits(
+  summary : AuditSummary,
+  epoch : @epoch.QCEpoch,
+) -> Json {
+  let hits : Array[Json] = []
+  for entry in summary.epoch_control_rule_hits {
+    if entry.epoch.has_same_metadata(epoch) {
+      hits.push(
+        Json::object({
+          "control_level_id": Json::string(entry.control_level_id),
+          "rule": Json::string(entry.rule.name()),
+          "count": Json::number(entry.count.to_double()),
+        }),
+      )
+    }
+  }
+  Json::array(hits)
+}
+
+///|
 fn audit_json_summary(summary : AuditSummary) -> Json {
   let fields : Map[String, Json] = Map([])
   fields["input_runs"] = Json::number(summary.input_runs.to_double())
@@ -271,6 +496,14 @@ fn audit_json_summary(summary : AuditSummary) -> Json {
         "RequiresReview": Json::number(entry.requires_review.to_double()),
         "Incomplete": Json::number(entry.incomplete.to_double()),
       })
+      epoch_fields["rule_hit_counts"] = audit_json_epoch_rule_hits(
+        summary,
+        entry.epoch,
+      )
+      epoch_fields["control_rule_hit_counts"] = audit_json_epoch_control_rule_hits(
+        summary,
+        entry.epoch,
+      )
       Json::object(epoch_fields)
     }),
   )
@@ -283,6 +516,40 @@ fn audit_json_summary(summary : AuditSummary) -> Json {
       Json::object(control_fields)
     }),
   )
+  fields["control_observation_coverage"] = Json::array(
+    summary.control_coverage.map(fn(entry) {
+      let coverage_fields = match audit_json_epoch(entry.epoch) {
+        Object(value) => value
+        _ => Map([])
+      }
+      coverage_fields["control_level_id"] = Json::string(entry.control_level_id)
+      coverage_fields["required"] = Json::boolean(entry.required)
+      coverage_fields["expected_runs"] = Json::number(
+        entry.expected_runs.to_double(),
+      )
+      coverage_fields["observed_runs"] = Json::number(
+        entry.observed_runs.to_double(),
+      )
+      coverage_fields["missing_runs"] = Json::number(
+        entry.missing_runs.to_double(),
+      )
+      coverage_fields["precision_mismatch_runs"] = Json::number(
+        entry.precision_mismatch_runs.to_double(),
+      )
+      Json::object(coverage_fields)
+    }),
+  )
+  fields["control_observation_counts"] = Json::object({
+    "expected": Json::number(summary.expected_control_observations.to_double()),
+    "observed": Json::number(summary.observed_control_observations.to_double()),
+    "missing": Json::number(summary.missing_control_observations.to_double()),
+    "precision_mismatch": Json::number(
+      summary.precision_mismatch_control_observations.to_double(),
+    ),
+    "required_missing": Json::number(
+      summary.required_missing_control_observations.to_double(),
+    ),
+  })
   fields["track_issue_count"] = Json::number(summary.track_issues.to_double())
   Json::object(fields)
 }
@@ -298,7 +565,7 @@ pub fn render_audit_json(
   let fields : Map[String, Json] = Map([])
   fields["schema_version"] = Json::number(1.0)
   fields["program"] = audit_json_program(program)
-  let summary = audit_summary(runs, trajectory)
+  let summary = audit_summary(program, runs, trajectory)
   fields["runs"] = Json::array(runs.map(audit_json_run))
   fields["epochs"] = Json::array(
     summary.epoch_runs.map(fn(entry) { audit_json_epoch(entry.epoch) }),
@@ -319,7 +586,7 @@ pub fn render_audit_manifest(
   runs : Array[@run.QCRun],
   trajectory : @evidence.Trajectory,
 ) -> String {
-  let summary = audit_summary(runs, trajectory)
+  let summary = audit_summary(program, runs, trajectory)
   let fields : Map[String, Json] = Map([])
   fields["schema_version"] = Json::number(1.0)
   fields["report_schema_version"] = Json::number(1.0)
@@ -330,6 +597,21 @@ pub fn render_audit_manifest(
     "epoch_count": Json::number(summary.epoch_runs.length().to_double()),
     "track_issue_count": Json::number(summary.track_issues.to_double()),
     "rule_hit_count": Json::number(summary.total_rule_hits.to_double()),
+    "expected_control_observations": Json::number(
+      summary.expected_control_observations.to_double(),
+    ),
+    "observed_control_observations": Json::number(
+      summary.observed_control_observations.to_double(),
+    ),
+    "missing_control_observations": Json::number(
+      summary.missing_control_observations.to_double(),
+    ),
+    "precision_mismatch_control_observations": Json::number(
+      summary.precision_mismatch_control_observations.to_double(),
+    ),
+    "required_missing_control_observations": Json::number(
+      summary.required_missing_control_observations.to_double(),
+    ),
     "status_counts": Json::object({
       "InControl": Json::number(summary.in_control.to_double()),
       "Warning": Json::number(summary.warning.to_double()),
@@ -337,6 +619,19 @@ pub fn render_audit_manifest(
       "Incomplete": Json::number(summary.incomplete.to_double()),
     }),
   })
+  fields["epoch_rule_hit_counts"] = Json::array(
+    summary.epoch_runs.map(fn(entry) {
+      Json::object({
+        "epoch_id": Json::string(entry.epoch.id),
+        "run_count": Json::number(entry.count.to_double()),
+        "rule_hit_counts": audit_json_epoch_rule_hits(summary, entry.epoch),
+        "control_rule_hit_counts": audit_json_epoch_control_rule_hits(
+          summary,
+          entry.epoch,
+        ),
+      })
+    }),
+  )
   fields["artifacts"] = Json::array(
     [
       {
@@ -612,7 +907,7 @@ pub fn render_audit_markdown(
   runs : Array[@run.QCRun],
   trajectory : @evidence.Trajectory,
 ) -> String {
-  let summary = audit_summary(runs, trajectory)
+  let summary = audit_summary(program, runs, trajectory)
   let output = StringBuilder()
   output.write_string("# QC replay — ")
   output.write_string(program.assay_id)
@@ -659,6 +954,42 @@ pub fn render_audit_markdown(
       output.write_string(entry.count.to_string())
       output.write_string(" run(s)")
     }
+  }
+  output.write_string("\n- Epoch rule hits: ")
+  let mut has_epoch_rule_hit = false
+  for entry in summary.epoch_rule_hits {
+    if !has_epoch_rule_hit {
+      has_epoch_rule_hit = true
+    } else {
+      output.write_string("; ")
+    }
+    output.write_string(entry.epoch.id)
+    output.write_char(' ')
+    output.write_string(entry.rule.name())
+    output.write_char(' ')
+    output.write_string(entry.count.to_string())
+  }
+  if !has_epoch_rule_hit {
+    output.write_string("none")
+  }
+  output.write_string("\n- Epoch/control rule hits: ")
+  let mut has_epoch_control_rule_hit = false
+  for entry in summary.epoch_control_rule_hits {
+    if !has_epoch_control_rule_hit {
+      has_epoch_control_rule_hit = true
+    } else {
+      output.write_string("; ")
+    }
+    output.write_string(entry.epoch.id)
+    output.write_char(' ')
+    output.write_string(entry.control_level_id)
+    output.write_char('/')
+    output.write_string(entry.rule.name())
+    output.write_char(' ')
+    output.write_string(entry.count.to_string())
+  }
+  if !has_epoch_control_rule_hit {
+    output.write_string("none")
   }
   output.write_string("\n- Track issues: ")
   output.write_string(summary.track_issues.to_string())

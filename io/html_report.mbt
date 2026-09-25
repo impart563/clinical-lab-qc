@@ -91,6 +91,63 @@ fn html_find_control_rule_run_index(
 }
 
 ///|
+fn html_find_epoch_control_rule_run_index(
+  runs : Array[@run.QCRun],
+  trajectory : @evidence.Trajectory,
+  epoch : @epoch.QCEpoch,
+  control_level_id : String,
+  rule : @assay.Rule,
+) -> Int? {
+  for index, assessment in trajectory.assessments {
+    match runs.get(index) {
+      Some(run) if run.epoch.has_same_metadata(epoch) =>
+        for hit in assessment.hits {
+          if hit.rule == rule {
+            for point in hit.evidence {
+              if point.control_level_id == control_level_id {
+                return Some(index)
+              }
+            }
+          }
+        }
+      _ => ()
+    }
+  }
+  None
+}
+
+///|
+fn html_find_coverage_gap_run_index(
+  runs : Array[@run.QCRun],
+  trajectory : @evidence.Trajectory,
+  coverage : ControlCoverageCount,
+  precision : Int,
+) -> Int? {
+  for index, run in runs {
+    if run.epoch.has_same_metadata(coverage.epoch) &&
+      trajectory.assessments.get(index) is Some(_) {
+      let mut point : @run.ControlPoint? = None
+      for observation in run.observations {
+        if observation.control_level_id == coverage.control_level_id &&
+          point is None {
+          point = Some(observation)
+        }
+      }
+      if coverage.missing_runs > 0 && point is None {
+        return Some(index)
+      }
+      if coverage.missing_runs == 0 &&
+        coverage.precision_mismatch_runs > 0 &&
+        point is Some(observation) &&
+        observation.precision != precision {
+        return Some(index)
+      }
+    }
+  }
+  None
+}
+
+///|
 fn html_append_status_card(
   output : StringBuilder,
   label : String,
@@ -255,7 +312,7 @@ pub fn render_audit_html(
   runs : Array[@run.QCRun],
   trajectory : @evidence.Trajectory,
 ) -> String {
-  let summary = audit_summary(runs, trajectory)
+  let summary = audit_summary(program, runs, trajectory)
   let output = StringBuilder()
   output.write_string(
     "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>QC audit report — ",
@@ -371,6 +428,99 @@ pub fn render_audit_html(
     }
     output.write_string("</tbody></table>\n")
   }
+  output.write_string("<h3>Rule signals by epoch and control</h3>\n")
+  if summary.epoch_control_rule_hits.length() == 0 {
+    output.write_string(
+      "<p class=\"empty\">No epoch-specific control rule hits.</p>\n",
+    )
+  } else {
+    output.write_string(
+      "<table><thead><tr><th>Epoch</th><th>Control</th><th>Rule</th><th>Hit runs</th><th>Disposition</th><th>Navigate</th></tr></thead><tbody>\n",
+    )
+    for entry in summary.epoch_control_rule_hits {
+      output.write_string("<tr><td>")
+      output.write_string(html_escape(entry.epoch.id))
+      output.write_string("</td><td>")
+      output.write_string(html_escape(entry.control_level_id))
+      output.write_string("</td><td>")
+      output.write_string(entry.rule.name())
+      output.write_string("</td><td>")
+      output.write_string(entry.count.to_string())
+      output.write_string("</td><td>")
+      output.write_string(
+        audit_rule_disposition_name(program.disposition_for(entry.rule)),
+      )
+      output.write_string("</td><td>")
+      match
+        html_find_epoch_control_rule_run_index(
+          runs,
+          trajectory,
+          entry.epoch,
+          entry.control_level_id,
+          entry.rule,
+        ) {
+        Some(index) => {
+          output.write_string("<a href=\"#run-")
+          output.write_string(index.to_string())
+          output.write_string("\">Open first signal</a>")
+        }
+        None => output.write_string("No evidence run")
+      }
+      output.write_string("</td></tr>\n")
+    }
+    output.write_string("</tbody></table>\n")
+  }
+  output.write_string("<h3>Control observation coverage</h3>\n")
+  if summary.control_coverage.length() == 0 {
+    output.write_string(
+      "<p class=\"empty\">No expected control observations.</p>\n",
+    )
+  } else {
+    output.write_string(
+      "<table><thead><tr><th>Epoch</th><th>Control</th><th>Required</th><th>Expected runs</th><th>Observed runs</th><th>Missing runs</th><th>Precision mismatch</th><th>Navigate</th></tr></thead><tbody>\n",
+    )
+    for coverage in summary.control_coverage {
+      output.write_string("<tr><td>")
+      output.write_string(html_escape(coverage.epoch.id))
+      output.write_string("</td><td>")
+      output.write_string(html_escape(coverage.control_level_id))
+      output.write_string("</td><td>")
+      output.write_string(if coverage.required { "Yes" } else { "No" })
+      output.write_string("</td><td>")
+      output.write_string(coverage.expected_runs.to_string())
+      output.write_string("</td><td>")
+      output.write_string(coverage.observed_runs.to_string())
+      output.write_string("</td><td>")
+      output.write_string(coverage.missing_runs.to_string())
+      output.write_string("</td><td>")
+      output.write_string(coverage.precision_mismatch_runs.to_string())
+      output.write_string("</td><td>")
+      match
+        html_find_coverage_gap_run_index(
+          runs,
+          trajectory,
+          coverage,
+          program.precision,
+        ) {
+        Some(index) => {
+          output.write_string("<a href=\"#run-")
+          output.write_string(index.to_string())
+          output.write_string("\">")
+          output.write_string(
+            if coverage.missing_runs > 0 {
+              "Open first missing run"
+            } else {
+              "Open first precision mismatch"
+            },
+          )
+          output.write_string("</a>")
+        }
+        None => output.write_string("No coverage gaps")
+      }
+      output.write_string("</td></tr>\n")
+    }
+    output.write_string("</tbody></table>\n")
+  }
   output.write_string("</section>\n")
 
   output.write_string(
@@ -415,7 +565,7 @@ pub fn render_audit_html(
     output.write_string("<p class=\"empty\">No epochs.</p>\n")
   } else {
     output.write_string(
-      "<table><thead><tr><th>Epoch</th><th>Reagent lot</th><th>Control lot</th><th>Calibration</th><th>Program version</th><th>Runs</th><th>In control</th><th>Warning</th><th>Requires review</th><th>Incomplete</th><th>Navigate</th></tr></thead><tbody>\n",
+      "<table><thead><tr><th>Epoch</th><th>Reagent lot</th><th>Control lot</th><th>Calibration</th><th>Program version</th><th>Runs</th><th>In control</th><th>Warning</th><th>Requires review</th><th>Incomplete</th><th>Rule hits</th><th>Navigate</th></tr></thead><tbody>\n",
     )
     for entry in summary.epoch_runs {
       output.write_string("<tr><td>")
@@ -438,6 +588,10 @@ pub fn render_audit_html(
       output.write_string(entry.requires_review.to_string())
       output.write_string("</td><td>")
       output.write_string(entry.incomplete.to_string())
+      output.write_string("</td><td>")
+      output.write_string(
+        audit_epoch_total_rule_hits(summary.epoch_rule_hits, entry.epoch).to_string(),
+      )
       output.write_string("</td><td>")
       match html_find_epoch_run_index(runs, entry.epoch) {
         Some(index) => {

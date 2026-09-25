@@ -119,6 +119,25 @@ def verify_scenario(name: str) -> None:
         f"{name}: per-epoch statuses do not reconcile with track totals",
     )
     require(actual_rules == expected_rules, f"{name}: unexpected rule counts {actual_rules}")
+    epoch_rule_totals = Counter()
+    epoch_control_rule_totals = Counter()
+    for entry in summary["epoch_run_counts"]:
+        epoch_rule_totals.update(
+            {
+                hit["rule"]: hit["count"]
+                for hit in entry["rule_hit_counts"]
+            }
+        )
+        epoch_control_rule_totals.update(
+            {
+                (hit["control_level_id"], hit["rule"]): hit["count"]
+                for hit in entry["control_rule_hit_counts"]
+            }
+        )
+    require(
+        dict(epoch_rule_totals) == actual_rules,
+        f"{name}: per-epoch rule hits do not reconcile with track totals",
+    )
     require(summary["total_rule_hits"] == sum(expected_nonzero.values()), f"{name}: unexpected hit total")
     expected_control_rules = (
         {("L1", "1_2s"): 1, ("L1", "4_1s"): 6, ("L1", "10x"): 2}
@@ -132,6 +151,32 @@ def verify_scenario(name: str) -> None:
     require(
         actual_control_rules == expected_control_rules,
         f"{name}: unexpected control-level hit counts {actual_control_rules}",
+    )
+    require(
+        dict(epoch_control_rule_totals) == actual_control_rules,
+        f"{name}: per-epoch/control rule hits do not reconcile with track totals",
+    )
+    coverage = summary["control_observation_coverage"]
+    require(
+        len(coverage) == 2 * len(summary["epoch_run_counts"]),
+        f"{name}: expected one coverage row per epoch and control level",
+    )
+    require(
+        all(
+            row["expected_runs"] == row["observed_runs"]
+            and row["missing_runs"] == 0
+            and row["precision_mismatch_runs"] == 0
+            for row in coverage
+        ),
+        f"{name}: complete demo track reported a coverage gap",
+    )
+    control_observations = summary["control_observation_counts"]
+    require(
+        control_observations["expected"] == 24
+        and control_observations["observed"] == 24
+        and control_observations["missing"] == 0
+        and control_observations["precision_mismatch"] == 0,
+        f"{name}: demo coverage totals changed: {control_observations}",
     )
 
     csv_rows = list(csv.DictReader(io.StringIO(outputs["csv"])))
@@ -167,6 +212,7 @@ def verify_scenario(name: str) -> None:
     require('<svg xmlns="http://www.w3.org/2000/svg"' in html_report, f"{name}: embedded SVG missing")
     require('class="control-panel"' in html_report, f"{name}: embedded chart panels missing")
     require("Run assessments" in html_report, f"{name}: run details missing")
+    require("Control observation coverage" in html_report, f"{name}: HTML coverage summary missing")
     run_targets = set(re.findall(r'<details class="run" id="([^"]+)"', html_report))
     run_links = re.findall(r'href="#([^"]+)"', html_report)
     require(len(run_targets) == 12, f"{name}: expected one HTML anchor per assessment")
@@ -333,6 +379,62 @@ def verify_input_preflight() -> None:
     qc_signal_only = source.replace(",L1,100\n", ",L1,1000\n", 1)
     signal_report = json.loads(check_format(qc_signal_only, "json").stdout)
     require(signal_report["valid"] is True, "QC rule signals must not invalidate file structure")
+
+
+def verify_observation_coverage() -> None:
+    print("Verify missing observation coverage")
+    source = (ROOT / "examples" / "synthetic-iqc.csv").read_text(encoding="utf-8")
+    missing_l2 = "\n".join(
+        line.rsplit(",", 1)[0] + "," if ",L2," in line else line
+        for line in source.splitlines()
+    ) + "\n"
+    program = str(ROOT / "examples" / "demo-program.json")
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", suffix=".csv", delete=False
+    ) as csv_file:
+        csv_file.write(missing_l2)
+        csv_path = Path(csv_file.name)
+    try:
+        base_args = [
+            "moon",
+            "run",
+            "--target",
+            "native",
+            "cmd/demo",
+            "--",
+            "--input",
+            str(csv_path),
+            "--program",
+            program,
+        ]
+        report = json.loads(command(base_args + ["--format", "json"]).stdout)
+        counts = report["summary"]["control_observation_counts"]
+        require(counts == {
+            "expected": 6,
+            "observed": 3,
+            "missing": 3,
+            "precision_mismatch": 0,
+            "required_missing": 3,
+        }, f"missing L2 observations were not summarized correctly: {counts}")
+        coverage = {
+            row["control_level_id"]: row
+            for row in report["summary"]["control_observation_coverage"]
+        }
+        require(coverage["L1"]["missing_runs"] == 0, "present L1 controls marked missing")
+        require(coverage["L2"]["missing_runs"] == 3, "missing L2 count changed")
+        html = command(base_args + ["--format", "html"]).stdout
+        require("href=\"#run-0\">Open first missing run</a>" in html, "missing-control navigation missing")
+        with tempfile.TemporaryDirectory(prefix="clinical lab qc coverage ") as bundle_root:
+            bundle_dir = Path(bundle_root) / "review"
+            command(base_args + ["--bundle", str(bundle_dir)])
+            manifest = json.loads((bundle_dir / "manifest.json").read_text(encoding="utf-8"))
+            require(
+                manifest["counts"]["missing_control_observations"] == 3
+                and manifest["counts"]["required_missing_control_observations"] == 3,
+                "bundle manifest omitted missing-observation counts",
+            )
+    finally:
+        csv_path.unlink(missing_ok=True)
 
 
 def verify_report_file_output() -> None:
@@ -528,6 +630,7 @@ def main() -> int:
         invalid_csv_path.unlink(missing_ok=True)
 
     verify_input_preflight()
+    verify_observation_coverage()
     verify_report_file_output()
     verify_review_bundle()
 

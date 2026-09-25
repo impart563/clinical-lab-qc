@@ -124,6 +124,12 @@ test "audit JSON is deterministic, versioned, and contains provenance and summar
   assert_true(json.contains("\"run_count\": 2"))
   assert_true(json.contains("\"run_count\": 1"))
   assert_true(json.contains("\"control_rule_hit_counts\""))
+  assert_true(json.contains("\"control_observation_coverage\""))
+  assert_true(json.contains("\"expected_runs\": 2"))
+  assert_true(json.contains("\"observed_runs\": 2"))
+  assert_true(json.contains("\"missing_runs\": 0"))
+  assert_true(json.contains("\"expected\": 3"))
+  assert_true(json.contains("\"observed\": 3"))
   assert_true(json.contains("\"control_level_id\": \"L1\""))
   assert_true(json.contains("\"Warning\": 1"))
   assert_true(json.contains("\"InControl\": 2"))
@@ -134,6 +140,10 @@ test "audit JSON is deterministic, versioned, and contains provenance and summar
   assert_true(manifest.contains("\"schema_version\": 1"))
   assert_true(manifest.contains("\"input_runs\": 3"))
   assert_true(manifest.contains("\"epoch_count\": 2"))
+  assert_true(manifest.contains("\"epoch_rule_hit_counts\""))
+  assert_true(manifest.contains("\"control_level_id\": \"L1\""))
+  assert_true(manifest.contains("\"expected_control_observations\": 3"))
+  assert_true(manifest.contains("\"missing_control_observations\": 0"))
   assert_true(manifest.contains("\"RequiresReview\": 0"))
   assert_true(manifest.contains("\"path\": \"report.html\""))
   assert_true(!manifest.contains("timestamp"))
@@ -159,6 +169,8 @@ test "audit CSV preserves quoted identifiers and emits assessment evidence and s
   assert_true(markdown.contains("Rule hits: 1_2s 1"))
   assert_true(markdown.contains("lot,\"a\" 2 run(s)"))
   assert_true(markdown.contains("lot-b 1 run(s)"))
+  assert_true(markdown.contains("Epoch rule hits: lot,\"a\" 1_2s 1"))
+  assert_true(markdown.contains("Epoch/control rule hits: lot,\"a\" L1/1_2s 1"))
 }
 
 ///|
@@ -178,6 +190,16 @@ test "offline HTML audit report is deterministic and combines summary chart and 
   assert_true(html.contains("href=\"#run-2\">Open first run</a>"))
   assert_true(html.contains("<th>Requires review</th><th>Incomplete</th>"))
   assert_true(html.contains("Control rule hit counts"))
+  assert_true(html.contains("Rule signals by epoch and control"))
+  assert_true(html.contains("<th>Rule hits</th><th>Navigate</th>"))
+  assert_true(
+    html.contains(
+      "<tr><td>lot,&quot;a&quot;</td><td>L1</td><td>1_2s</td><td>1</td><td>warning</td><td><a href=\"#run-0\">Open first signal</a></td></tr>",
+    ),
+  )
+  assert_true(html.contains("href=\"#run-0\">Open first signal</a>"))
+  assert_true(html.contains("Control observation coverage"))
+  assert_true(html.contains("<th>Expected runs</th><th>Observed runs</th>"))
   assert_true(html.contains("<a href=\"#run-0\">Open first signal</a>"))
   assert_true(html.contains("Rule signals and evidence"))
   assert_true(html.contains("test warning signal"))
@@ -188,6 +210,88 @@ test "offline HTML audit report is deterministic and combines summary chart and 
   assert_true(!html.contains("<script"))
   assert_true(!html.contains("<link"))
   assert_true(!html.contains("https://"))
+}
+
+///|
+test "coverage separates absent and wrong-precision control observations" {
+  let base_program = audit_test_program()
+  let program : @assay.AssayProgram = {
+    assay_id: base_program.assay_id,
+    unit: base_program.unit,
+    precision: base_program.precision,
+    levels: base_program.levels +
+    [{ id: "L2", mean: 20000L, standard_deviation: 200L, required: false }],
+    rule_policies: base_program.rule_policies,
+  }
+  let original_runs = audit_test_runs()
+  let runs : Array[@run.QCRun] = [
+    original_runs[0],
+    {
+      run_id: original_runs[1].run_id,
+      epoch: original_runs[1].epoch,
+      sequence: original_runs[1].sequence,
+      timestamp: original_runs[1].timestamp,
+      observations: [],
+    },
+    {
+      run_id: original_runs[2].run_id,
+      epoch: original_runs[2].epoch,
+      sequence: original_runs[2].sequence,
+      timestamp: original_runs[2].timestamp,
+      observations: [{ control_level_id: "L1", value: 10000L, precision: 1 }],
+    },
+  ]
+  let trajectory : @evidence.Trajectory = {
+    assessments: [
+      audit_test_trajectory().assessments[0],
+      {
+        run_id: runs[1].run_id,
+        sequence: runs[1].sequence,
+        status: @evidence.Incomplete,
+        hits: [],
+        input_issues: [
+          {
+            code: @evidence.MissingRequiredControl,
+            run_id: Some(runs[1].run_id),
+            message: "required control L1 is missing",
+          },
+        ],
+      },
+      {
+        run_id: runs[2].run_id,
+        sequence: runs[2].sequence,
+        status: @evidence.Incomplete,
+        hits: [],
+        input_issues: [
+          {
+            code: @evidence.PrecisionMismatch,
+            run_id: Some(runs[2].run_id),
+            message: "control precision does not match the assay program",
+          },
+        ],
+      },
+    ],
+    input_issues: [],
+  }
+  let json = render_audit_json(program, runs, trajectory)
+  assert_true(json.contains("\"missing_runs\": 1"))
+  assert_true(json.contains("\"precision_mismatch_runs\": 1"))
+  assert_true(json.contains("\"required_missing\": 1"))
+  assert_true(json.contains("\"missing\": 4"))
+  assert_true(json.contains("\"required\": false"))
+  assert_true(json.contains("\"precision_mismatch\": 1"))
+  let html = render_audit_html(program, runs, trajectory)
+  assert_true(html.contains("Open first missing run</a>"))
+  assert_true(html.contains("href=\"#run-1\">Open first missing run</a>"))
+  assert_true(
+    html.contains("href=\"#run-2\">Open first precision mismatch</a>"),
+  )
+  let manifest = render_audit_manifest(program, runs, trajectory)
+  assert_true(manifest.contains("\"missing_control_observations\": 4"))
+  assert_true(manifest.contains("\"required_missing_control_observations\": 1"))
+  assert_true(
+    manifest.contains("\"precision_mismatch_control_observations\": 1"),
+  )
 }
 
 ///|
