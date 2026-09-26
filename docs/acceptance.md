@@ -14,19 +14,6 @@
 
 验收脚本会检查所有支持的 MoonBit 目标，构建 native CLI，运行测试、公开 quickstart 和独立下游模块消费 smoke test；对三个演示场景核对预期结果；重复运行 Markdown、JSON、CSV、SVG、HTML 并比较输出；检查 JSON/CSV/HTML 统计一致性、HTML 内嵌 SVG 可解析且无外部资源、状态/阶段/证据导航链接均指向运行记录、CSV 预检文本和 JSON 结果、行列诊断、缺失控制警告、质控信号与输入有效性的分离、HTML/JSON 文件写入和失败路径处理、CLI 错误处理，最后构建 Moon package 归档并确认本地 workspace 配置和下游样例未混入发布包。
 
-按 2026-09-26 可见的黑客松页面，本期截止日期为 9 月 30 日；报名申报需要公开仓库和一页项目说明，开发过程应持续提交并保留可追踪记录，验收材料包括代码、README、测试和可复现演示。该页面没有列出提交数量下限或 Mooncakes 发布要求。项目计划书引用的飞书章程提到至少 10 个有效提交及 Mooncakes 发布等更严格条件；提交前应以最新赛事群通知和正式章程核实，不把它们误写成当前公开页面的明文要求。OSC2026 是另一场赛事，其要求不能自动套用到本场。
-
-## Mooncakes 重合检索记录
-
-检索日期：2026-09-26。通过 Mooncakes 公开页面及搜索索引检索 `clinical laboratory QC`、`laboratory quality control`、`Westgard` 和 `MoonBit QC`，并查看下列项目页面：
-
-- [`moonbitSPC`](https://mooncakes.io/docs/mwqcodex/moonbitSPC)（页面版本 0.2.0，MIT）：定位为制造业统计过程控制，公开接口包含控制图和 Western Electric 规则检测，是相邻度最高的通用 SPC 项目。
-- [`moonbit-ocean-qc`](https://mooncakes.io/docs/lwq443/moonbit-ocean-qc)（页面版本 0.3.0，Apache-2.0）：定位为海洋观测数据质控。
-
-本项目按临床检验室内质控场景独立实现，采用分析项目、控制水平、批号/校准阶段快照和可回放规则证据作为核心模型；参考 Westgard 规则语义，不基于或移植上述项目代码。以上检索是公开页面检索，不足以证明注册表不存在其他重合项目，也不推断这些项目缺少未核实的功能；申报前应重新核查，如发现成熟且直接面向临床实验室质控的 MoonBit 项目，再评估独立开发的必要性。
-
-仓库无法证明参赛者已报名、通过资格审核或加入赛事群；这些步骤须在官方流程中完成。若报名表要求一页项目说明，应通过官方入口另行提交。
-
 ## 演示场景契约
 
 | 场景 | 预期结果 |
