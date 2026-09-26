@@ -24,6 +24,7 @@ moon run --target native cmd/demo -- --check-input --input examples/synthetic-iq
 moon run --target native cmd/demo -- --program examples/demo-program.json --check-program
 moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format json
 moon run --target native examples/quickstart
+moon -C examples/downstream-consumer run --target native .
 python scripts/acceptance.py
 ```
 
@@ -40,6 +41,7 @@ The default Markdown output starts with track totals and then lists each run, tr
 - `--output <path>` writes the selected report format directly to a file, replacing an existing file; without it, reports go to standard output. The output parent directory must already exist. Write failures return a clear error and nonzero exit status.
 - `--bundle <directory>` creates an offline review package containing `report.html`, `audit.json`, `audit.csv`, `chart.svg`, and `manifest.json`. The manifest records schema versions, relative artifact paths, run/epoch totals, status counts, and control-observation coverage; it omits source paths and timestamps so identical input produces identical files. Existing files in the selected directory are replaced.
 - `examples/quickstart` is a small downstream-style program that constructs the public API types, replays data, and renders Markdown and SVG through the root package.
+- `examples/downstream-consumer` is a separate MoonBit module that consumes the public API through a local workspace dependency. It smoke-tests package boundaries before a registry release; after publication, the versioned registry dependency should also be checked.
 
 Assay profile JSON uses `schema_version: 1`; unknown fields are rejected. Control `mean` and `standard_deviation` values are decimal strings (for example, `"100.25"`) so they are converted exactly at the declared precision. Rule names are `1_2s`, `1_3s`, `2_2s`, `R_4s`, `4_1s`, and `10x`; dispositions are `disabled`, `warning`, or `requires_review`. Rules omitted from the `rules` array keep their built-in default dispositions. See [the example profile](examples/demo-program.json). The public parser is `parse_assay_program_json`.
 
@@ -87,7 +89,7 @@ moon package
 python scripts/acceptance.py
 ```
 
-`python scripts/acceptance.py` runs the same all-target checks, build, tests, public quickstart, deterministic scenario checks, cross-format consistency checks, CLI error cases, and package build locally. CI invokes this script and records the installed MoonBit CLI version in its log.
+`python scripts/acceptance.py` runs the same all-target checks, build, tests, public quickstart, separate downstream-consumer smoke test, deterministic scenario checks, cross-format consistency checks, CLI error cases, and package build locally. CI invokes this script and records the installed MoonBit CLI version in its log.
 
 Acceptance also checks structured CSV locations, epoch status and rule-hit summaries, per-epoch/control rule attribution, per-control observation coverage, missing-value navigation, and byte-for-byte deterministic review bundles.
 

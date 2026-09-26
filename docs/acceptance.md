@@ -1,20 +1,29 @@
 # 项目验收证据
 
-本文件是对照 [2026 MoonBit 黑客松公开页面](https://moonbitlang.github.io/Hackathon2026/)整理的自查表，核对日期为 2026-09-25。它不代表赛事官方审核结论，实际以赛事群及官方通知为准。
+本文件是对照 [2026 MoonBit 黑客松公开页面](https://moonbitlang.github.io/Hackathon2026/)整理的自查表，核对日期为 2026-09-26。它不代表赛事官方审核结论，实际以赛事群及官方通知为准。
 
 | 公开验收项 | 仓库证据 | 复现方式 |
 | --- | --- | --- |
 | MoonBit 为主要实现语言 | 核心模型、规则、回放、报告渲染器和 CLI 均为 .mbt 包 | **moon check --deny-warn --target all** |
 | 仓库公开且开发记录可追踪 | [GitHub 仓库](https://github.com/impart563/clinical-lab-qc)、提交历史和 CHANGELOG.md | 检查提交分支的真实增量 |
-| 项目能够运行，有 README 和示例 | README.md、examples/quickstart、cmd/demo | **moon run --target native examples/quickstart** |
-| 已有项目包含本期实质新增 | 分析项目 JSON 配置、JSON/CSV/Markdown/HTML 审计报告、SVG 图表、场景验收测试和公开 API 示例 | 运行验收脚本并查看对应提交 |
+| 项目能够运行，有 README 和示例 | README.md、examples/quickstart、独立的 examples/downstream-consumer、cmd/demo | **python scripts/acceptance.py** 会在单独 MoonBit 模块中导入并调用公开 API |
+| 项目具有可核验的实质工作 | 分析项目 JSON 配置、JSON/CSV/Markdown/HTML 审计报告、SVG 图表、场景验收测试和公开 API 示例 | 运行验收脚本并查看对应提交 |
 | 开源合规 | LICENSE（Apache-2.0）、moon.mod、docs/rule-semantics.md 中的来源说明 | 提交前复查依赖许可证和来源声明 |
 | 参赛者能解释技术选择与质量 | docs/design-decisions.md、源码、测试和公开 API 接口 | 说明整数精度、阶段重置、缺失值、证据与报告生成 |
 | 项目验收材料可复现 | 源码、README、测试和三个演示场景 | **python scripts/acceptance.py** |
 
-验收脚本会检查所有支持的 MoonBit 目标，构建 native CLI，运行测试和公开 quickstart；对三个演示场景核对预期结果；重复运行 Markdown、JSON、CSV、SVG、HTML 并比较输出；检查 JSON/CSV/HTML 统计一致性、HTML 内嵌 SVG 可解析且无外部资源、状态/阶段/证据导航链接均指向运行记录、CSV 预检文本和 JSON 结果、行列诊断、缺失控制警告、质控信号与输入有效性的分离、HTML/JSON 文件写入和失败路径处理、CLI 错误处理，最后构建 Moon package 归档。
+验收脚本会检查所有支持的 MoonBit 目标，构建 native CLI，运行测试、公开 quickstart 和独立下游模块消费 smoke test；对三个演示场景核对预期结果；重复运行 Markdown、JSON、CSV、SVG、HTML 并比较输出；检查 JSON/CSV/HTML 统计一致性、HTML 内嵌 SVG 可解析且无外部资源、状态/阶段/证据导航链接均指向运行记录、CSV 预检文本和 JSON 结果、行列诊断、缺失控制警告、质控信号与输入有效性的分离、HTML/JSON 文件写入和失败路径处理、CLI 错误处理，最后构建 Moon package 归档并确认本地 workspace 配置和下游样例未混入发布包。
 
-当前公开的黑客松页面没有列出提交数量下限或 Mooncakes 发布要求。项目计划书引用的飞书章程提到了这些更严格条件，应先向赛事群核实再将其当作硬门槛。OSC2026 是另一场赛事，其要求不能自动套用到本场。
+按 2026-09-26 可见的黑客松页面，本期截止日期为 9 月 30 日；报名申报需要公开仓库和一页项目说明，开发过程应持续提交并保留可追踪记录，验收材料包括代码、README、测试和可复现演示。该页面没有列出提交数量下限或 Mooncakes 发布要求。项目计划书引用的飞书章程提到至少 10 个有效提交及 Mooncakes 发布等更严格条件；提交前应以最新赛事群通知和正式章程核实，不把它们误写成当前公开页面的明文要求。OSC2026 是另一场赛事，其要求不能自动套用到本场。
+
+## Mooncakes 重合检索记录
+
+检索日期：2026-09-26。通过 Mooncakes 公开页面及搜索索引检索 `clinical laboratory QC`、`laboratory quality control`、`Westgard` 和 `MoonBit QC`，并查看下列项目页面：
+
+- [`moonbitSPC`](https://mooncakes.io/docs/mwqcodex/moonbitSPC)（页面版本 0.2.0，MIT）：定位为制造业统计过程控制，公开接口包含控制图和 Western Electric 规则检测，是相邻度最高的通用 SPC 项目。
+- [`moonbit-ocean-qc`](https://mooncakes.io/docs/lwq443/moonbit-ocean-qc)（页面版本 0.3.0，Apache-2.0）：定位为海洋观测数据质控。
+
+本项目按临床检验室内质控场景独立实现，采用分析项目、控制水平、批号/校准阶段快照和可回放规则证据作为核心模型；参考 Westgard 规则语义，不基于或移植上述项目代码。以上检索是公开页面检索，不足以证明注册表不存在其他重合项目，也不推断这些项目缺少未核实的功能；申报前应重新核查，如发现成熟且直接面向临床实验室质控的 MoonBit 项目，再评估独立开发的必要性。
 
 仓库无法证明参赛者已报名、通过资格审核或加入赛事群；这些步骤须在官方流程中完成。若报名表要求一页项目说明，应通过官方入口另行提交。
 

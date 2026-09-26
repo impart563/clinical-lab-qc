@@ -1,0 +1,9 @@
+_build/
+target/
+.mooncakes/
+.moonagent/
+__pycache__/
+*.py[cod]
+.DS_Store
+moon.work
+examples/downstream-consumer/

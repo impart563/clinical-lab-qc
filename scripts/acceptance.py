@@ -19,10 +19,15 @@ ROOT = Path(__file__).resolve().parents[1]
 SVG_NS = "{http://www.w3.org/2000/svg}"
 
 
-def command(args: list[str], *, expected: int = 0) -> subprocess.CompletedProcess[str]:
+def command(
+    args: list[str],
+    *,
+    expected: int = 0,
+    cwd: Path = ROOT,
+) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         args,
-        cwd=ROOT,
+        cwd=cwd,
         check=False,
         capture_output=True,
         text=True,
@@ -437,6 +442,18 @@ def verify_observation_coverage() -> None:
         csv_path.unlink(missing_ok=True)
 
 
+def verify_downstream_consumer() -> None:
+    print("Verify separate downstream module consumer")
+    output = command(
+        ["moon", "run", "--target", "native", "."],
+        cwd=ROOT / "examples" / "downstream-consumer",
+    ).stdout
+    require(
+        "Downstream consumer smoke passed" in output,
+        "separate downstream consumer did not run through the public API",
+    )
+
+
 def verify_report_file_output() -> None:
     print("Verify report file output")
     with tempfile.TemporaryDirectory(prefix="clinical lab qc ") as directory:
@@ -565,6 +582,7 @@ def main() -> int:
         if line.startswith("Total tests:"):
             print(line)
     moon("run", "--target", "native", "examples/quickstart")
+    verify_downstream_consumer()
 
     for scenario in ("stable", "step-shift", "gradual-drift"):
         verify_scenario(scenario)
@@ -635,7 +653,16 @@ def main() -> int:
     verify_review_bundle()
 
     print("Build Moon package archive")
-    moon("package")
+    moon("-C", str(ROOT), "package")
+    package_entries = moon("-C", str(ROOT), "package", "--list").splitlines()
+    require(
+        "moon.work" not in package_entries
+        and not any(
+            item.replace("\\", "/").startswith("examples/downstream-consumer/")
+            for item in package_entries
+        ),
+        "local workspace consumer fixture leaked into the published module archive",
+    )
     print("Acceptance checks passed.")
     return 0
 
