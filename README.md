@@ -55,7 +55,7 @@ The compiled [quickstart example](examples/quickstart/main.mbt) shows the comple
 
 `render_audit_html(program, runs, trajectory)` returns a deterministic, self-contained HTML review report. It embeds the SVG chart and inline CSS, escapes report data as HTML, and includes run observations, status, rule evidence, input issues, and QC epoch metadata without contacting a network resource.
 
-The reviewer-facing [project one-pager](docs/project-one-pager.md), [acceptance evidence map](docs/acceptance.md), [design decisions](docs/design-decisions.md), and [changelog](CHANGELOG.md) explain the project scope, development history, and how to reproduce its main results.
+The [acceptance evidence map](docs/acceptance.md), [design decisions](docs/design-decisions.md), and [changelog](CHANGELOG.md) explain the project scope, development history, and how to reproduce its main results.
 
 An `AssayProgram` declares an assay, measurement unit, decimal precision, control levels with target means and positive standard deviations, required levels, and rule policies. Values are signed `Int64` scaled integers: with precision `2`, `100.25` is represented as `10025`. Comparisons never convert to floating point. Arithmetic overflow is returned as an input issue.
 
