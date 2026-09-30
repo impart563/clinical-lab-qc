@@ -45,4 +45,26 @@ fn main {
   let trajectory = @qc.replay_track(program, runs)
   println("Downstream consumer smoke passed")
   println(@qc.render_audit_markdown(program, runs, trajectory))
+
+  let csv = "epoch_id,reagent_lot,control_lot,calibration_id,program_version,run_id,sequence,timestamp,control_level_id,value\n" +
+    "lot-a,reagent-a,control-a,cal-a,v1,registry-run,1,2026-09-30T08:00:00Z,normal,100\n"
+  let batch = @qc.parse_qc_csv_batch_detailed(program, [
+    { label: "daily export.csv", text: csv, },
+  ])
+  if batch.diagnostics.length() > 0 {
+    panic()
+  }
+  let batch_trajectory = @qc.replay_track(
+    program,
+    batch.runs.map(fn(entry) { entry.run }),
+  )
+  let batch_report = @qc.render_audit_json_batch(
+    program,
+    batch.runs,
+    batch_trajectory,
+  )
+  if !batch_report.contains("\"source_label\": \"daily export.csv\"") {
+    panic()
+  }
+  println("Downstream batch API smoke passed")
 }

@@ -452,6 +452,10 @@ def verify_downstream_consumer() -> None:
         "Downstream consumer smoke passed" in output,
         "separate downstream consumer did not run through the public API",
     )
+    require(
+        "Downstream batch API smoke passed" in output,
+        "separate consumer could not install or call the published batch API",
+    )
 
 
 def verify_report_file_output() -> None:
