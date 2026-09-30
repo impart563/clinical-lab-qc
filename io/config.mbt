@@ -29,6 +29,9 @@ pub(all) struct ProgramConfigResult {
 } derive(Debug)
 
 ///|
+pub extend ProgramConfigResult with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
 fn config_contains(values : Array[String], value : String) -> Bool {
   for item in values {
     if item == value {
@@ -125,12 +128,12 @@ fn config_disposition(name : String) -> @assay.RuleDisposition? {
 pub fn parse_assay_program_json(text : String) -> ProgramConfigResult {
   let json = @json.parse(text) catch {
     error =>
-      return { program: None, issues: ["invalid JSON: " + error.to_string()] }
+      return { program: None, issues: ["invalid JSON: " + error.to_string()], }
   }
   let shape_issues : Array[String] = []
   validate_config_fields(json, shape_issues)
   if shape_issues.length() > 0 {
-    return { program: None, issues: shape_issues }
+    return { program: None, issues: shape_issues, }
   }
   let config : ProgramConfigFile = @json.from_json(json) catch {
     error =>
@@ -212,12 +215,12 @@ pub fn parse_assay_program_json(text : String) -> ProgramConfigResult {
     }
     match (rule, disposition) {
       (Some(rule_value), Some(disposition_value)) =>
-        rule_policies.push({ rule: rule_value, disposition: disposition_value })
+        rule_policies.push({ rule: rule_value, disposition: disposition_value, })
       _ => ()
     }
   }
   if issues.length() > 0 {
-    return { program: None, issues }
+    return { program: None, issues, }
   }
   let program : @assay.AssayProgram = {
     assay_id: config.assay_id,
@@ -231,7 +234,7 @@ pub fn parse_assay_program_json(text : String) -> ProgramConfigResult {
     for issue in validation.issues {
       issues.push(issue)
     }
-    return { program: None, issues }
+    return { program: None, issues, }
   }
-  { program: Some(program), issues }
+  { program: Some(program), issues, }
 }

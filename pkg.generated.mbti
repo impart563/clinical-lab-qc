@@ -24,19 +24,33 @@ pub fn parse_assay_program_json(String) -> @io.ProgramConfigResult
 
 pub fn parse_qc_csv(@assay.AssayProgram, String) -> @io.CsvParseResult
 
+pub fn parse_qc_csv_batch_detailed(@assay.AssayProgram, Array[@io.QCCsvInput]) -> @io.CsvBatchParseDetailedResult
+
 pub fn parse_qc_csv_detailed(@assay.AssayProgram, String) -> @io.CsvParseDetailedResult
 
 pub fn render_audit_csv(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
+pub fn render_audit_csv_batch(@assay.AssayProgram, Array[@io.SourcedQCRun], @evidence.Trajectory) -> String
+
 pub fn render_audit_html(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
+
+pub fn render_audit_html_batch(@assay.AssayProgram, Array[@io.SourcedQCRun], @evidence.Trajectory) -> String
 
 pub fn render_audit_json(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
+pub fn render_audit_json_batch(@assay.AssayProgram, Array[@io.SourcedQCRun], @evidence.Trajectory) -> String
+
 pub fn render_audit_manifest(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
+
+pub fn render_audit_manifest_batch(@assay.AssayProgram, Array[@io.SourcedQCRun], @evidence.Trajectory) -> String
 
 pub fn render_audit_markdown(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
+pub fn render_audit_markdown_batch(@assay.AssayProgram, Array[@io.SourcedQCRun], @evidence.Trajectory) -> String
+
 pub fn render_levey_jennings_svg(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
+
+pub fn render_levey_jennings_svg_batch(@assay.AssayProgram, Array[@io.SourcedQCRun], @evidence.Trajectory) -> String
 
 pub fn render_trajectory_json(@evidence.Trajectory) -> String
 
@@ -71,6 +85,8 @@ pub using @assay {type ControlLevel}
 
 pub using @run {type ControlPoint}
 
+pub using @io {type CsvBatchParseDetailedResult}
+
 pub using @io {type CsvDiagnostic}
 
 pub using @io {type CsvParseDetailedResult}
@@ -87,6 +103,8 @@ pub using @evidence {type InputIssueCode}
 
 pub using @io {type ProgramConfigResult}
 
+pub using @io {type QCCsvInput}
+
 pub using @epoch {type QCEpoch}
 
 pub using @run {type QCRun}
@@ -102,6 +120,10 @@ pub using @assay {type RulePolicy}
 pub using @evidence {type RuleScope}
 
 pub using @evidence {type RunAssessment}
+
+pub using @io {type SourcedCsvDiagnostic}
+
+pub using @io {type SourcedQCRun}
 
 pub using @evidence {type Trajectory}
 

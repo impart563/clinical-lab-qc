@@ -5,15 +5,15 @@ fn audit_test_program() -> @assay.AssayProgram {
     unit: "unit/L",
     precision: 2,
     levels: [
-      { id: "L1", mean: 10000L, standard_deviation: 100L, required: true },
+      { id: "L1", mean: 10000L, standard_deviation: 100L, required: true, },
     ],
     rule_policies: [
-      { rule: @assay.Rule12s, disposition: @assay.Warning },
-      { rule: @assay.Rule13s, disposition: @assay.Disabled },
-      { rule: @assay.Rule22s, disposition: @assay.Disabled },
-      { rule: @assay.RuleR4s, disposition: @assay.Disabled },
-      { rule: @assay.Rule41s, disposition: @assay.Disabled },
-      { rule: @assay.Rule10x, disposition: @assay.Disabled },
+      { rule: @assay.Rule12s, disposition: @assay.Warning, },
+      { rule: @assay.Rule13s, disposition: @assay.Disabled, },
+      { rule: @assay.Rule22s, disposition: @assay.Disabled, },
+      { rule: @assay.RuleR4s, disposition: @assay.Disabled, },
+      { rule: @assay.Rule41s, disposition: @assay.Disabled, },
+      { rule: @assay.Rule10x, disposition: @assay.Disabled, },
     ],
   }
 }
@@ -40,21 +40,21 @@ fn audit_test_runs() -> Array[@run.QCRun] {
       epoch,
       sequence: 1L,
       timestamp: "2026-09-27T08:00:00Z",
-      observations: [{ control_level_id: "L1", value: 10201L, precision: 2 }],
+      observations: [{ control_level_id: "L1", value: 10201L, precision: 2, }],
     },
     {
       run_id: "run-2",
       epoch,
       sequence: 2L,
       timestamp: "2026-09-27T08:05:00Z",
-      observations: [{ control_level_id: "L1", value: 10000L, precision: 2 }],
+      observations: [{ control_level_id: "L1", value: 10000L, precision: 2, }],
     },
     {
       run_id: "run-3",
       epoch: next_epoch,
       sequence: 1L,
       timestamp: "2026-09-27T08:10:00Z",
-      observations: [{ control_level_id: "L1", value: 10000L, precision: 2 }],
+      observations: [{ control_level_id: "L1", value: 10000L, precision: 2, }],
     },
   ]
 }
@@ -114,8 +114,8 @@ test "audit JSON is deterministic, versioned, and contains provenance and summar
   let program = audit_test_program()
   let runs = audit_test_runs()
   let trajectory = audit_test_trajectory()
-  let json = render_audit_json(program, runs, trajectory)
-  assert_eq(json, render_audit_json(program, runs, trajectory))
+  let json = @io.render_audit_json(program, runs, trajectory)
+  assert_eq(json, @io.render_audit_json(program, runs, trajectory))
   assert_true(json.contains("\"schema_version\": 1"))
   assert_true(json.contains("\"assay_id\": \"audit-analyte\""))
   assert_true(json.contains("\"observations\""))
@@ -135,8 +135,8 @@ test "audit JSON is deterministic, versioned, and contains provenance and summar
   assert_true(json.contains("\"InControl\": 2"))
   assert_true(json.contains("\"total_rule_hits\": 1"))
   assert_true(json.contains("\"rule\": \"1_2s\""))
-  let manifest = render_audit_manifest(program, runs, trajectory)
-  assert_eq(manifest, render_audit_manifest(program, runs, trajectory))
+  let manifest = @io.render_audit_manifest(program, runs, trajectory)
+  assert_eq(manifest, @io.render_audit_manifest(program, runs, trajectory))
   assert_true(manifest.contains("\"schema_version\": 1"))
   assert_true(manifest.contains("\"input_runs\": 3"))
   assert_true(manifest.contains("\"epoch_count\": 2"))
@@ -155,14 +155,14 @@ test "audit CSV preserves quoted identifiers and emits assessment evidence and s
   let program = audit_test_program()
   let runs = audit_test_runs()
   let trajectory = audit_test_trajectory()
-  let csv = render_audit_csv(program, runs, trajectory)
+  let csv = @io.render_audit_csv(program, runs, trajectory)
   assert_true(csv.has_prefix("record_type,assay_id,program_unit"))
   assert_true(csv.contains("\"sample,\"\"run\"\"\""))
   assert_true(csv.contains("\"observation\""))
   assert_true(csv.contains("\"evidence\""))
   assert_true(csv.contains("\"1_2s\""))
   assert_true(csv.contains("\"10201\""))
-  let markdown = render_audit_markdown(program, runs, trajectory)
+  let markdown = @io.render_audit_markdown(program, runs, trajectory)
   assert_true(markdown.contains("Input runs: 3; assessed: 3"))
   assert_true(markdown.contains("Warning 1"))
   assert_true(markdown.contains("InControl 2"))
@@ -178,8 +178,8 @@ test "offline HTML audit report is deterministic and combines summary chart and 
   let program = audit_test_program()
   let runs = audit_test_runs()
   let trajectory = audit_test_trajectory()
-  let html = render_audit_html(program, runs, trajectory)
-  assert_eq(html, render_audit_html(program, runs, trajectory))
+  let html = @io.render_audit_html(program, runs, trajectory)
+  assert_eq(html, @io.render_audit_html(program, runs, trajectory))
   assert_true(html.has_prefix("<!doctype html>"))
   assert_true(html.contains("<html lang=\"en\">"))
   assert_true(html.contains("Offline QC audit report · schema version 1"))
@@ -220,7 +220,7 @@ test "coverage separates absent and wrong-precision control observations" {
     unit: base_program.unit,
     precision: base_program.precision,
     levels: base_program.levels +
-    [{ id: "L2", mean: 20000L, standard_deviation: 200L, required: false }],
+    [{ id: "L2", mean: 20000L, standard_deviation: 200L, required: false, }],
     rule_policies: base_program.rule_policies,
   }
   let original_runs = audit_test_runs()
@@ -238,7 +238,7 @@ test "coverage separates absent and wrong-precision control observations" {
       epoch: original_runs[2].epoch,
       sequence: original_runs[2].sequence,
       timestamp: original_runs[2].timestamp,
-      observations: [{ control_level_id: "L1", value: 10000L, precision: 1 }],
+      observations: [{ control_level_id: "L1", value: 10000L, precision: 1, }],
     },
   ]
   let trajectory : @evidence.Trajectory = {
@@ -273,20 +273,20 @@ test "coverage separates absent and wrong-precision control observations" {
     ],
     input_issues: [],
   }
-  let json = render_audit_json(program, runs, trajectory)
+  let json = @io.render_audit_json(program, runs, trajectory)
   assert_true(json.contains("\"missing_runs\": 1"))
   assert_true(json.contains("\"precision_mismatch_runs\": 1"))
   assert_true(json.contains("\"required_missing\": 1"))
   assert_true(json.contains("\"missing\": 4"))
   assert_true(json.contains("\"required\": false"))
   assert_true(json.contains("\"precision_mismatch\": 1"))
-  let html = render_audit_html(program, runs, trajectory)
+  let html = @io.render_audit_html(program, runs, trajectory)
   assert_true(html.contains("Open first missing run</a>"))
   assert_true(html.contains("href=\"#run-1\">Open first missing run</a>"))
   assert_true(
     html.contains("href=\"#run-2\">Open first precision mismatch</a>"),
   )
-  let manifest = render_audit_manifest(program, runs, trajectory)
+  let manifest = @io.render_audit_manifest(program, runs, trajectory)
   assert_true(manifest.contains("\"missing_control_observations\": 4"))
   assert_true(manifest.contains("\"required_missing_control_observations\": 1"))
   assert_true(
@@ -318,11 +318,11 @@ test "HTML escaping protects report text and quoted values" {
       epoch,
       sequence: 1L,
       timestamp: "2026-09-27T08:00:00Z",
-      observations: [{ control_level_id: "L1", value: 10000L, precision: 2 }],
+      observations: [{ control_level_id: "L1", value: 10000L, precision: 2, }],
     },
   ]
-  let trajectory : @evidence.Trajectory = { assessments: [], input_issues: [] }
-  let html = render_audit_html(program, runs, trajectory)
+  let trajectory : @evidence.Trajectory = { assessments: [], input_issues: [], }
+  let html = @io.render_audit_html(program, runs, trajectory)
   assert_true(
     html.contains(
       "&lt;script&gt;alert(&#39;x&#39;) &amp; &quot;y&quot;&lt;/script&gt;",
@@ -342,7 +342,7 @@ test "HTML run details preserve positional snapshots through an invalid duplicat
     epoch: first.epoch,
     sequence: first.sequence,
     timestamp: "duplicate timestamp",
-    observations: [{ control_level_id: "L1", value: 12345L, precision: 2 }],
+    observations: [{ control_level_id: "L1", value: 12345L, precision: 2, }],
   }
   let runs = [first, duplicate]
   let duplicate_issue : @evidence.InputIssue = {
@@ -369,7 +369,7 @@ test "HTML run details preserve positional snapshots through an invalid duplicat
     ],
     input_issues: [duplicate_issue],
   }
-  let html = render_audit_html(program, runs, trajectory)
+  let html = @io.render_audit_html(program, runs, trajectory)
   assert_true(html.contains("123.45 unit/L"))
   assert_true(html.contains("duplicate timestamp"))
   assert_true(html.contains("duplicate run id in track"))

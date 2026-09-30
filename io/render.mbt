@@ -2,7 +2,7 @@
 fn format_scaled(value : Int64, precision : Int) -> String {
   let raw = value.to_string()
   let negative = raw.has_prefix("-")
-  let digits = if negative { raw.sub(start=1).to_owned() } else { raw }
+  let digits = if negative { raw.exact_view(start=1).to_owned() } else { raw }
   if precision == 0 {
     if negative {
       "-" + digits
@@ -12,8 +12,8 @@ fn format_scaled(value : Int64, precision : Int) -> String {
   } else {
     let padded = digits.pad_start(precision + 1, '0')
     let split = padded.length() - precision
-    let whole = padded.sub(end=split).to_owned()
-    let fraction = padded.sub(start=split).to_owned()
+    let whole = padded.exact_view(end=split).to_owned()
+    let fraction = padded.exact_view(start=split).to_owned()
     if negative {
       "-" + whole + "." + fraction
     } else {

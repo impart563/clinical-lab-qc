@@ -21,6 +21,7 @@ pub(all) struct AssayProgram {
   rule_policies : Array[RulePolicy]
 } derive(@debug.Debug)
 pub fn AssayProgram::disposition_for(Self, Rule) -> RuleDisposition
+pub fn AssayProgram::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ControlLevel {
   id : String
@@ -28,6 +29,7 @@ pub(all) struct ControlLevel {
   standard_deviation : Int64
   required : Bool
 } derive(@debug.Debug)
+pub fn ControlLevel::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Rule {
   Rule12s
@@ -38,23 +40,31 @@ pub(all) enum Rule {
   Rule10x
 } derive(Eq, @debug.Debug)
 pub fn Rule::default_disposition(Self) -> RuleDisposition
+pub fn Rule::equal(Self, Self) -> Bool
 pub fn Rule::name(Self) -> String
+pub fn Rule::not_equal(Self, Self) -> Bool
+pub fn Rule::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RuleDisposition {
   Disabled
   Warning
   RequiresReview
 } derive(Eq, @debug.Debug)
+pub fn RuleDisposition::equal(Self, Self) -> Bool
+pub fn RuleDisposition::not_equal(Self, Self) -> Bool
+pub fn RuleDisposition::to_repr(Self) -> @debug.Repr
 
 pub(all) struct RulePolicy {
   rule : Rule
   disposition : RuleDisposition
 } derive(@debug.Debug)
+pub fn RulePolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ValidationResult {
   issues : Array[String]
 } derive(@debug.Debug)
 pub fn ValidationResult::is_valid(Self) -> Bool
+pub fn ValidationResult::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

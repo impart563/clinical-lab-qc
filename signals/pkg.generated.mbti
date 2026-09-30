@@ -18,6 +18,7 @@ pub(all) struct SignalResult {
   hits : Array[@evidence.RuleHit]
   issues : Array[@evidence.InputIssue]
 } derive(@debug.Debug)
+pub fn SignalResult::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

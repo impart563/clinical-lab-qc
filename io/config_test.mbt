@@ -18,7 +18,7 @@ fn sample_program_config(
 
 ///|
 test "assay program JSON preserves exact decimal values" {
-  let parsed = parse_assay_program_json(
+  let parsed = @io.parse_assay_program_json(
     sample_program_config("2", "100.25", "", "1"),
   )
   assert_eq(parsed.issues.length(), 0)
@@ -36,12 +36,12 @@ test "assay program JSON preserves exact decimal values" {
 
 ///|
 test "assay program JSON rejects unknown fields and unsupported versions" {
-  let unknown = parse_assay_program_json(
+  let unknown = @io.parse_assay_program_json(
     sample_program_config("2", "100.25", ",\"precison\":2", "1"),
   )
   assert_true(unknown.program is None)
   assert_true(unknown.issues[0].contains("unsupported field $.precison"))
-  let unsupported = parse_assay_program_json(
+  let unsupported = @io.parse_assay_program_json(
     sample_program_config("2", "100.25", "", "2"),
   )
   assert_true(unsupported.program is None)
@@ -50,17 +50,17 @@ test "assay program JSON rejects unknown fields and unsupported versions" {
 
 ///|
 test "assay program JSON reports decimal and rule errors" {
-  let bad_decimal = parse_assay_program_json(
+  let bad_decimal = @io.parse_assay_program_json(
     sample_program_config("2", "100.251", "", "1"),
   )
   assert_true(bad_decimal.program is None)
   assert_true(bad_decimal.issues[0].contains("levels[0].mean"))
-  let overflow = parse_assay_program_json(
+  let overflow = @io.parse_assay_program_json(
     sample_program_config("0", "9223372036854775808", "", "1"),
   )
   assert_true(overflow.program is None)
   assert_true(overflow.issues[0].contains("overflow"))
-  let bad_rule = parse_assay_program_json(
+  let bad_rule = @io.parse_assay_program_json(
     "{\"schema_version\":1,\"assay_id\":\"a\",\"unit\":\"u\",\"precision\":0,\"levels\":[{\"id\":\"L1\",\"mean\":\"1\",\"standard_deviation\":\"1\",\"required\":true}],\"rules\":[{\"rule\":\"unknown\",\"disposition\":\"urgent\"}]}",
   )
   assert_true(bad_rule.program is None)
@@ -69,10 +69,10 @@ test "assay program JSON reports decimal and rule errors" {
 
 ///|
 test "assay program JSON reports structural and semantic validation errors" {
-  let malformed = parse_assay_program_json("{not-json")
+  let malformed = @io.parse_assay_program_json("{not-json")
   assert_true(malformed.program is None)
   assert_true(malformed.issues[0].has_prefix("invalid JSON:"))
-  let invalid = parse_assay_program_json(
+  let invalid = @io.parse_assay_program_json(
     "{\"schema_version\":1,\"assay_id\":\"a\",\"unit\":\"u\",\"precision\":0,\"levels\":[{\"id\":\"L1\",\"mean\":\"1\",\"standard_deviation\":\"0\",\"required\":true}],\"rules\":[]}",
   )
   assert_true(invalid.program is None)

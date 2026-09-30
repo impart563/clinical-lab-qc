@@ -2,4 +2,5 @@ import {
   "impart563/clinical-lab-qc/assay",
   "impart563/clinical-lab-qc/run",
   "impart563/clinical-lab-qc/evidence",
+  "moonbitlang/core/debug",
 }

@@ -115,3 +115,42 @@ pub(all) struct Trajectory {
   assessments : Array[RunAssessment]
   input_issues : Array[InputIssue]
 } derive(Debug)
+
+///|
+pub extend AssessmentStatus with Eq::{not_equal, equal}
+
+///|
+pub extend AssessmentStatus with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend RuleScope with Eq::{not_equal, equal}
+
+///|
+pub extend RuleScope with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend Direction with Eq::{not_equal, equal}
+
+///|
+pub extend Direction with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend InputIssueCode with Eq::{not_equal, equal}
+
+///|
+pub extend InputIssueCode with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend InputIssue with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend EvidencePoint with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend RuleHit with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend RunAssessment with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend Trajectory with @moonbitlang/core/debug.Debug::{to_repr}

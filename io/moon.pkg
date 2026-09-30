@@ -4,4 +4,5 @@ import {
   "impart563/clinical-lab-qc/run",
   "impart563/clinical-lab-qc/evidence",
   "moonbitlang/core/json",
+  "moonbitlang/core/debug",
 }

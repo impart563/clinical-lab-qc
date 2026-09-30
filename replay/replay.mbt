@@ -4,7 +4,7 @@ fn issue(
   run_id : String?,
   message : String,
 ) -> @evidence.InputIssue {
-  { code, run_id, message }
+  { code, run_id, message, }
 }
 
 ///|
@@ -324,5 +324,5 @@ pub fn replay_track(
       }
     }
   }
-  { assessments, input_issues: issues }
+  { assessments, input_issues: issues, }
 }

@@ -64,6 +64,30 @@ pub(all) struct ValidationResult {
 } derive(Debug)
 
 ///|
+pub extend Rule with Eq::{not_equal, equal}
+
+///|
+pub extend Rule with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend RuleDisposition with Eq::{not_equal, equal}
+
+///|
+pub extend RuleDisposition with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend RulePolicy with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend ControlLevel with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend AssayProgram with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend ValidationResult with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
 pub fn ValidationResult::is_valid(self : ValidationResult) -> Bool {
   self.issues.length() == 0
 }
@@ -71,12 +95,12 @@ pub fn ValidationResult::is_valid(self : ValidationResult) -> Bool {
 ///|
 pub fn default_rule_policies() -> Array[RulePolicy] {
   [
-    { rule: Rule12s, disposition: Warning },
-    { rule: Rule13s, disposition: RequiresReview },
-    { rule: Rule22s, disposition: RequiresReview },
-    { rule: RuleR4s, disposition: RequiresReview },
-    { rule: Rule41s, disposition: RequiresReview },
-    { rule: Rule10x, disposition: RequiresReview },
+    { rule: Rule12s, disposition: Warning, },
+    { rule: Rule13s, disposition: RequiresReview, },
+    { rule: Rule22s, disposition: RequiresReview, },
+    { rule: RuleR4s, disposition: RequiresReview, },
+    { rule: Rule41s, disposition: RequiresReview, },
+    { rule: Rule10x, disposition: RequiresReview, },
   ]
 }
 

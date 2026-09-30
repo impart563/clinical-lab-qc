@@ -111,7 +111,7 @@ fn audit_increment_epoch_rule_hit(
         rule: counts[index].rule,
         count: counts[index].count + 1,
       }
-    None => counts.push({ epoch, rule, count: 1 })
+    None => counts.push({ epoch, rule, count: 1, })
   }
 }
 
@@ -139,7 +139,7 @@ fn audit_increment_epoch_control_rule_hit(
         rule: counts[index].rule,
         count: counts[index].count + 1,
       }
-    None => counts.push({ epoch, control_level_id, rule, count: 1 })
+    None => counts.push({ epoch, control_level_id, rule, count: 1, })
   }
 }
 
@@ -178,7 +178,7 @@ fn audit_summary(
       }
     }
     total_rule_hits = total_rule_hits + count
-    { rule, count }
+    { rule, count, }
   })
   for assessment in trajectory.assessments {
     match assessment.status {
@@ -375,7 +375,7 @@ fn audit_json_epoch(epoch : @epoch.QCEpoch) -> Json {
 }
 
 ///|
-fn audit_json_run(run : @run.QCRun) -> Json {
+fn audit_json_run(run : @run.QCRun, source_label : String?) -> Json {
   let fields : Map[String, Json] = Map([])
   fields["run_id"] = Json::string(run.run_id)
   fields["sequence"] = json_number(run.sequence)
@@ -390,6 +390,10 @@ fn audit_json_run(run : @run.QCRun) -> Json {
       Json::object(point_fields)
     }),
   )
+  match source_label {
+    Some(label) => fields["source_label"] = Json::string(label)
+    None => ()
+  }
   Json::object(fields)
 }
 
@@ -557,16 +561,31 @@ fn audit_json_summary(summary : AuditSummary) -> Json {
 ///|
 /// Render a versioned JSON audit report containing the assay configuration,
 /// epoch snapshots, assessments, issues, and reconciliable track summaries.
-pub fn render_audit_json(
+fn render_audit_json_inner(
   program : @assay.AssayProgram,
   runs : Array[@run.QCRun],
   trajectory : @evidence.Trajectory,
+  source_labels : Array[String]?,
 ) -> String {
   let fields : Map[String, Json] = Map([])
-  fields["schema_version"] = Json::number(1.0)
+  fields["schema_version"] = Json::number(
+    if source_labels is Some(_) {
+      2.0
+    } else {
+      1.0
+    },
+  )
   fields["program"] = audit_json_program(program)
   let summary = audit_summary(program, runs, trajectory)
-  fields["runs"] = Json::array(runs.map(audit_json_run))
+  let run_json : Array[Json] = []
+  for index, run in runs {
+    let source_label = match source_labels {
+      Some(labels) => labels.get(index).map(report_source_label)
+      None => None
+    }
+    run_json.push(audit_json_run(run, source_label))
+  }
+  fields["runs"] = Json::array(run_json)
   fields["epochs"] = Json::array(
     summary.epoch_runs.map(fn(entry) { audit_json_epoch(entry.epoch) }),
   )
@@ -579,17 +598,49 @@ pub fn render_audit_json(
 }
 
 ///|
-/// Render a deterministic manifest for the files produced by the offline
-/// review bundle. The manifest contains no source path or wall-clock time.
-pub fn render_audit_manifest(
+/// Render a versioned JSON audit report containing the assay configuration,
+/// epoch snapshots, assessments, issues, and reconciliable track summaries.
+pub fn render_audit_json(
   program : @assay.AssayProgram,
   runs : Array[@run.QCRun],
   trajectory : @evidence.Trajectory,
 ) -> String {
+  render_audit_json_inner(program, runs, trajectory, None)
+}
+
+///|
+/// Render a batch JSON report with a source label on every run and schema
+/// version 2. Labels are reduced to display names so filesystem paths are not
+/// written into review artifacts.
+pub fn render_audit_json_batch(
+  program : @assay.AssayProgram,
+  sourced_runs : Array[SourcedQCRun],
+  trajectory : @evidence.Trajectory,
+) -> String {
+  let runs = sourced_runs.map(fn(entry) { entry.run })
+  let labels = sourced_runs.map(fn(entry) { entry.source_label })
+  render_audit_json_inner(program, runs, trajectory, Some(labels))
+}
+
+///|
+/// Render a deterministic manifest for the files produced by the offline
+/// review bundle. The manifest contains no source path or wall-clock time.
+fn render_audit_manifest_inner(
+  program : @assay.AssayProgram,
+  runs : Array[@run.QCRun],
+  trajectory : @evidence.Trajectory,
+  source_labels : Array[String]?,
+) -> String {
   let summary = audit_summary(program, runs, trajectory)
   let fields : Map[String, Json] = Map([])
   fields["schema_version"] = Json::number(1.0)
-  fields["report_schema_version"] = Json::number(1.0)
+  fields["report_schema_version"] = Json::number(
+    if source_labels is Some(_) {
+      2.0
+    } else {
+      1.0
+    },
+  )
   fields["assay_id"] = Json::string(program.assay_id)
   fields["counts"] = Json::object({
     "input_runs": Json::number(summary.input_runs.to_double()),
@@ -656,7 +707,43 @@ pub fn render_audit_manifest(
       },
     ].map(fn(artifact) { Json::object(artifact) }),
   )
+  match source_labels {
+    Some(labels) => {
+      let unique_labels : Array[String] = []
+      for label in labels {
+        let safe_label = report_source_label(label)
+        if !unique_labels.contains(safe_label) {
+          unique_labels.push(safe_label)
+        }
+      }
+      fields["source_labels"] = Json::array(unique_labels.map(Json::string))
+    }
+    None => ()
+  }
   Json::object(fields).stringify(indent=2)
+}
+
+///|
+/// Render a deterministic manifest for the files produced by the offline
+/// review bundle. The manifest contains no source path or wall-clock time.
+pub fn render_audit_manifest(
+  program : @assay.AssayProgram,
+  runs : Array[@run.QCRun],
+  trajectory : @evidence.Trajectory,
+) -> String {
+  render_audit_manifest_inner(program, runs, trajectory, None)
+}
+
+///|
+/// Render a deterministic batch manifest with sanitized source display names.
+pub fn render_audit_manifest_batch(
+  program : @assay.AssayProgram,
+  sourced_runs : Array[SourcedQCRun],
+  trajectory : @evidence.Trajectory,
+) -> String {
+  let runs = sourced_runs.map(fn(entry) { entry.run })
+  let labels = sourced_runs.map(fn(entry) { entry.source_label })
+  render_audit_manifest_inner(program, runs, trajectory, Some(labels))
 }
 
 ///|
@@ -687,14 +774,26 @@ fn audit_csv_row(values : Array[String]) -> String {
 }
 
 ///|
-fn audit_csv_headers() -> Array[String] {
+fn audit_csv_headers(include_source : Bool) -> Array[String] {
   [
     "record_type", "assay_id", "program_unit", "program_precision", "run_id", "sequence",
     "status", "epoch_id", "reagent_lot", "control_lot", "calibration_id", "program_version",
     "rule", "scope", "reason", "issue_code", "issue_message", "point_run_id", "point_sequence",
     "point_timestamp", "control_level_id", "value_scaled", "mean_scaled", "standard_deviation_scaled",
     "threshold_scaled", "direction", "precision", "unit",
-  ]
+  ] +
+  (if include_source { ["source_label"] } else { [] })
+}
+
+///|
+fn audit_csv_row_with_source(
+  values : Array[String],
+  source_label : String?,
+) -> Array[String] {
+  match source_label {
+    Some(label) => values + [report_source_label(label)]
+    None => values
+  }
 }
 
 ///|
@@ -823,15 +922,20 @@ fn audit_csv_issue(
 ///|
 /// Render one CSV row for each assessment, observation, evidence point, and issue.
 /// Scaled measurement columns remain exact integers; `precision` states the scale.
-pub fn render_audit_csv(
+fn render_audit_csv_inner(
   program : @assay.AssayProgram,
   runs : Array[@run.QCRun],
   trajectory : @evidence.Trajectory,
+  source_labels : Array[String]?,
 ) -> String {
   let output = StringBuilder()
-  output.write_string(audit_csv_headers().join(","))
+  output.write_string(audit_csv_headers(source_labels is Some(_)).join(","))
   output.write_char('\n')
   for index, run in runs {
+    let source_label = match source_labels {
+      Some(labels) => labels.get(index)
+      None => None
+    }
     let assessment : @evidence.RunAssessment? = trajectory.assessments.get(
       index,
     )
@@ -839,7 +943,10 @@ pub fn render_audit_csv(
       Some(value) => {
         output.write_string(
           audit_csv_row(
-            audit_csv_base(program, "assessment", Some(value), Some(run)),
+            audit_csv_row_with_source(
+              audit_csv_base(program, "assessment", Some(value), Some(run)),
+              source_label,
+            ),
           ),
         )
         output.write_char('\n')
@@ -848,7 +955,12 @@ pub fn render_audit_csv(
     }
     for point in run.observations {
       output.write_string(
-        audit_csv_row(audit_csv_observation(program, run, point)),
+        audit_csv_row(
+          audit_csv_row_with_source(
+            audit_csv_observation(program, run, point),
+            source_label,
+          ),
+        ),
       )
       output.write_char('\n')
     }
@@ -858,7 +970,10 @@ pub fn render_audit_csv(
           for evidence in hit.evidence {
             output.write_string(
               audit_csv_row(
-                audit_csv_evidence(program, value, Some(run), hit, evidence),
+                audit_csv_row_with_source(
+                  audit_csv_evidence(program, value, Some(run), hit, evidence),
+                  source_label,
+                ),
               ),
             )
             output.write_char('\n')
@@ -867,12 +982,15 @@ pub fn render_audit_csv(
         for issue in value.input_issues {
           output.write_string(
             audit_csv_row(
-              audit_csv_issue(
-                program,
-                Some(value),
-                Some(run),
-                issue,
-                "input_issue",
+              audit_csv_row_with_source(
+                audit_csv_issue(
+                  program,
+                  Some(value),
+                  Some(run),
+                  issue,
+                  "input_issue",
+                ),
+                source_label,
               ),
             ),
           )
@@ -884,20 +1002,52 @@ pub fn render_audit_csv(
   }
   for issue in trajectory.input_issues {
     let mut issue_run : @run.QCRun? = None
-    for run in runs {
+    let mut issue_source : String? = None
+    for index, run in runs {
       if issue.run_id == Some(run.run_id) {
         issue_run = Some(run)
+        issue_source = match source_labels {
+          Some(labels) => labels.get(index)
+          None => None
+        }
         break
       }
     }
     output.write_string(
       audit_csv_row(
-        audit_csv_issue(program, None, issue_run, issue, "track_issue"),
+        audit_csv_row_with_source(
+          audit_csv_issue(program, None, issue_run, issue, "track_issue"),
+          issue_source,
+        ),
       ),
     )
     output.write_char('\n')
   }
   output.to_string()
+}
+
+///|
+/// Render one CSV row for each assessment, observation, evidence point, and issue.
+/// Scaled measurement columns remain exact integers; `precision` states the scale.
+pub fn render_audit_csv(
+  program : @assay.AssayProgram,
+  runs : Array[@run.QCRun],
+  trajectory : @evidence.Trajectory,
+) -> String {
+  render_audit_csv_inner(program, runs, trajectory, None)
+}
+
+///|
+/// Render a batch CSV audit table with a `source_label` column on every
+/// run-associated record.
+pub fn render_audit_csv_batch(
+  program : @assay.AssayProgram,
+  sourced_runs : Array[SourcedQCRun],
+  trajectory : @evidence.Trajectory,
+) -> String {
+  let runs = sourced_runs.map(fn(entry) { entry.run })
+  let labels = sourced_runs.map(fn(entry) { entry.source_label })
+  render_audit_csv_inner(program, runs, trajectory, Some(labels))
 }
 
 ///|

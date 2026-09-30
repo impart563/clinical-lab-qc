@@ -5,6 +5,9 @@ pub(all) struct SignalResult {
 } derive(Debug)
 
 ///|
+pub extend SignalResult with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
 priv struct Sample {
   run : @run.QCRun
   point : @run.ControlPoint
@@ -12,7 +15,7 @@ priv struct Sample {
 
 ///|
 fn make_issue(run_id : String, message : String) -> @evidence.InputIssue {
-  { code: @evidence.ArithmeticOverflow, run_id: Some(run_id), message }
+  { code: @evidence.ArithmeticOverflow, run_id: Some(run_id), message, }
 }
 
 ///|
@@ -71,12 +74,12 @@ fn collect_samples(
   let samples : Array[Sample] = []
   for previous in history {
     match find_point(previous, level_id) {
-      Some(point) => samples.push({ run: previous, point })
+      Some(point) => samples.push({ run: previous, point, })
       None => samples.clear()
     }
   }
   match find_point(current, level_id) {
-    Some(point) => samples.push({ run: current, point })
+    Some(point) => samples.push({ run: current, point, })
     None => ()
   }
   samples
@@ -202,7 +205,7 @@ fn add_point_rule(
               Some(distance) =>
                 if distance > threshold {
                   let evidence = evidence_point(
-                    { run, point },
+                    { run, point, },
                     level,
                     program.unit,
                     threshold,
@@ -456,14 +459,14 @@ fn add_r4s_hits(
                         scope: @evidence.SameRun,
                         evidence: [
                           evidence_point(
-                            { run, point: point_a },
+                            { run, point: point_a, },
                             level_a,
                             program.unit,
                             ta,
                             @evidence.Above,
                           ),
                           evidence_point(
-                            { run, point: point_b },
+                            { run, point: point_b, },
                             level_b,
                             program.unit,
                             tb,
@@ -486,14 +489,14 @@ fn add_r4s_hits(
                               scope: @evidence.SameRun,
                               evidence: [
                                 evidence_point(
-                                  { run, point: point_b },
+                                  { run, point: point_b, },
                                   level_b,
                                   program.unit,
                                   tb,
                                   @evidence.Above,
                                 ),
                                 evidence_point(
-                                  { run, point: point_a },
+                                  { run, point: point_a, },
                                   level_a,
                                   program.unit,
                                   ta,
@@ -555,5 +558,5 @@ pub fn detect_signals(
     add_r4s_hits(program, run, hits, issues)
   }
   add_window_hits(program, run, history, hits, issues)
-  { hits, issues }
+  { hits, issues, }
 }

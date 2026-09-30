@@ -5,7 +5,7 @@ fn example_program() -> @qc.AssayProgram {
     unit: "unit/L",
     precision: 0,
     levels: [
-      { id: "normal", mean: 100L, standard_deviation: 10L, required: true },
+      { id: "normal", mean: 100L, standard_deviation: 10L, required: true, },
     ],
     rule_policies: @qc.default_rule_policies(),
   }
@@ -26,14 +26,14 @@ fn example_runs() -> Array[@qc.QCRun] {
       epoch,
       sequence: 1L,
       timestamp: "2026-09-25T08:00:00Z",
-      observations: [{ control_level_id: "normal", value: 100L, precision: 0 }],
+      observations: [{ control_level_id: "normal", value: 100L, precision: 0, }],
     },
     {
       run_id: "run-2",
       epoch,
       sequence: 2L,
       timestamp: "2026-09-25T08:05:00Z",
-      observations: [{ control_level_id: "normal", value: 104L, precision: 0 }],
+      observations: [{ control_level_id: "normal", value: 104L, precision: 0, }],
     },
   ]
 }

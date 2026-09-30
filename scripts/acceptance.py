@@ -569,7 +569,180 @@ def verify_review_bundle() -> None:
         )
 
 
+def verify_batch_replay() -> None:
+    print("Verify ordered multi-file replay and source provenance")
+    inputs = [
+        ROOT / "examples" / "daily-qc-2026-09-28.csv",
+        ROOT / "examples" / "daily-qc-2026-09-29.csv",
+        ROOT / "examples" / "daily-qc-2026-09-30.csv",
+    ]
+    prefix = [
+        "moon",
+        "run",
+        "--target",
+        "native",
+        "cmd/demo",
+        "--",
+        "--program",
+        "examples/demo-program.json",
+    ]
+    input_args = [argument for path in inputs for argument in ("--input", str(path))]
+    outputs: dict[str, str] = {}
+    for output_format in ("markdown", "json", "csv", "svg", "html"):
+        args = prefix + input_args + ["--format", output_format]
+        first = command(args).stdout
+        second = command(args).stdout
+        require(first == second, f"batch/{output_format} changed between identical replays")
+        outputs[output_format] = first
+
+    report = json.loads(outputs["json"])
+    require(report["schema_version"] == 2, "batch JSON schema version changed")
+    runs = report["runs"]
+    require(len(runs) == 30, f"batch should contain 30 runs, got {len(runs)}")
+    require([run["sequence"] for run in runs] == list(range(1, 31)), "input file order was not preserved")
+    require(
+        [runs[index]["source_label"] for index in (0, 10, 20)]
+        == [path.name for path in inputs],
+        "run source labels were not carried into JSON",
+    )
+    summary = report["summary"]
+    require(summary["track_issue_count"] == 0, "synthetic daily batch has track issues")
+    require(summary["input_runs"] == 30, "batch summary run count changed")
+    require(len(summary["epoch_run_counts"]) == 2, "lot transition should create two epochs")
+    require(
+        summary["control_observation_counts"]
+        == {"expected": 60, "observed": 60, "missing": 0, "precision_mismatch": 0, "required_missing": 0},
+        "daily sample should contain two controls for each run",
+    )
+    require(
+        any(hit["rule"] == "10x" and hit["count"] > 0 for hit in summary["rule_hit_counts"]),
+        "10x evidence did not cross the first-to-second file boundary",
+    )
+    for artifact in outputs.values():
+        require(str(ROOT) not in artifact, "batch report leaked a local absolute path")
+    require("daily-qc-2026-09-29.csv" in outputs["markdown"], "Markdown omitted source provenance")
+    require("source_label" in outputs["csv"], "batch CSV omitted source column")
+    csv_records = list(csv.DictReader(io.StringIO(outputs["csv"])))
+    source_by_run = {
+        record["run_id"]: record["source_label"]
+        for record in csv_records
+        if record["record_type"] == "assessment"
+    }
+    require(
+        source_by_run["qc-001"] == inputs[0].name
+        and source_by_run["qc-011"] == inputs[1].name
+        and source_by_run["qc-021"] == inputs[2].name,
+        "batch CSV source column was not associated with the correct runs",
+    )
+    require("daily-qc-2026-09-30.csv" in outputs["html"], "HTML omitted source provenance")
+    require("daily-qc-2026-09-28.csv" in outputs["svg"], "SVG omitted source metadata")
+    ET.fromstring(outputs["svg"])
+
+    preflight = json.loads(command(prefix + input_args + ["--check-input", "--format", "json"]).stdout)
+    require(preflight["valid"] is True and preflight["input_runs"] == 30, "batch preflight failed")
+
+    with tempfile.TemporaryDirectory(prefix="clinical lab qc batch ") as directory:
+        root = Path(directory)
+        first_bundle = root / "first bundle"
+        second_bundle = root / "second bundle"
+        for bundle in (first_bundle, second_bundle):
+            command(prefix + input_args + ["--bundle", str(bundle)])
+        first_files = {path.name: path.read_bytes() for path in first_bundle.iterdir()}
+        second_files = {path.name: path.read_bytes() for path in second_bundle.iterdir()}
+        require(first_files == second_files, "batch review bundle was not deterministic")
+        manifest = json.loads(first_files["manifest.json"].decode("utf-8"))
+        require(manifest["report_schema_version"] == 2, "batch manifest did not declare schema 2")
+        require(manifest["source_labels"] == [path.name for path in inputs], "manifest sources changed")
+
+        invalid_csv = root / "bad input.csv"
+        invalid_csv.write_text("not-a-qc-csv\n", encoding="utf-8")
+        bad_precision_csv = root / "bad precision.csv"
+        bad_precision_csv.write_text(
+            "epoch_id,reagent_lot,control_lot,calibration_id,program_version,run_id,sequence,timestamp,control_level_id,value\n"
+            "lot-a,R-1,C-1,CAL-1,v1,bad-precision,1,2026-09-30T08:00:00Z,L1,100.1\n",
+            encoding="utf-8",
+        )
+        missing_csv = root / "missing 零.csv"
+        failed_batch = command(
+            prefix
+            + [
+                "--input",
+                str(invalid_csv),
+                "--input",
+                str(bad_precision_csv),
+                "--input",
+                str(missing_csv),
+                "--format",
+                "json",
+            ],
+            expected=2,
+        )
+        require("bad input.csv" in failed_batch.stdout, "parse error omitted source filename")
+        require("bad precision.csv" in failed_batch.stdout, "second parse error was not accumulated")
+        require("missing 零.csv" in failed_batch.stdout, "read error omitted source filename")
+        require(str(root) not in failed_batch.stdout, "batch diagnostic leaked an absolute path")
+        require("Users\\" not in failed_batch.stdout, "batch diagnostic leaked a path component")
+        require("schema_version" not in failed_batch.stdout, "invalid batch emitted a QC report")
+
+        input_preflight = command(
+            prefix
+            + [
+                "--input",
+                str(bad_precision_csv),
+                "--input",
+                str(invalid_csv),
+                "--check-input",
+                "--format",
+                "json",
+            ],
+            expected=2,
+        )
+        preflight_errors = json.loads(input_preflight.stdout)
+        require(preflight_errors["error_count"] == 2, "batch preflight did not accumulate parse errors")
+        locations = [entry["location"] for entry in preflight_errors["errors"]]
+        require(
+            any(
+                location["source_file"] == bad_precision_csv.name
+                and location["line"] == 2
+                and location["column"] == 10
+                for location in locations
+            ),
+            "batch preflight omitted source file or CSV coordinates",
+        )
+
+        print("Verify generated 200-run batch replay")
+        generated_files: list[Path] = []
+        header = "epoch_id,reagent_lot,control_lot,calibration_id,program_version,run_id,sequence,timestamp,control_level_id,value"
+        for file_index in range(5):
+            rows = [header]
+            for index in range(40):
+                sequence = file_index * 40 + index + 1
+                run_id = f"generated-{sequence:03d}"
+                timestamp = f"2026-09-30T{sequence // 60:02d}:{sequence % 60:02d}:00Z"
+                values = (99 + sequence % 3, 199 + sequence % 3)
+                for level, value in zip(("L1", "L2"), values):
+                    rows.append(
+                        f"lot-scale,R-scale,C-scale,CAL-scale,v1,{run_id},{sequence},{timestamp},{level},{value}"
+                    )
+            generated = root / f"generated-{file_index + 1}.csv"
+            generated.write_text("\n".join(rows) + "\n", encoding="utf-8")
+            generated_files.append(generated)
+        generated_args = [arg for path in generated_files for arg in ("--input", str(path))]
+        generated_command = prefix + generated_args + ["--format", "json"]
+        generated_first = command(generated_command).stdout
+        generated_second = command(generated_command).stdout
+        require(generated_first == generated_second, "generated batch output was not deterministic")
+        generated_report = json.loads(generated_first)
+        require(generated_report["summary"]["input_runs"] == 200, "generated batch run count changed")
+        require(generated_report["summary"]["track_issue_count"] == 0, "generated batch has track issues")
+
+    conflicting = command(prefix + input_args[:2] + ["--scenario", "stable"], expected=2)
+    require("choose either --input or --scenario" in conflicting.stdout, "scenario conflict was accepted")
+
+
 def main() -> int:
+    print("Refresh the MoonBit package registry index")
+    moon("update")
     version_lines = command(["moon", "version"]).stdout.splitlines()
     require(bool(version_lines), "MoonBit toolchain version was not reported")
     print(f"MoonBit toolchain: {version_lines[0]}")
@@ -643,10 +816,11 @@ def main() -> int:
             ],
             expected=2,
         )
-        require("CSV input has 1 issue" in bad_csv.stdout, "malformed CSV error was not clear")
+        require("QC batch input has 1 error" in bad_csv.stdout, "malformed CSV error was not clear")
     finally:
         invalid_csv_path.unlink(missing_ok=True)
 
+    verify_batch_replay()
     verify_input_preflight()
     verify_observation_coverage()
     verify_report_file_output()

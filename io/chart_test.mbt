@@ -3,8 +3,8 @@ test "Levey-Jennings SVG is deterministic and includes limits epochs and evidenc
   let program = audit_test_program()
   let runs = audit_test_runs()
   let trajectory = audit_test_trajectory()
-  let svg = render_levey_jennings_svg(program, runs, trajectory)
-  assert_eq(svg, render_levey_jennings_svg(program, runs, trajectory))
+  let svg = @io.render_levey_jennings_svg(program, runs, trajectory)
+  assert_eq(svg, @io.render_levey_jennings_svg(program, runs, trajectory))
   assert_true(svg.has_prefix("<svg xmlns=\"http://www.w3.org/2000/svg\""))
   assert_true(svg.contains("data-sigma=\"-3\""))
   assert_true(svg.contains("data-sigma=\"3\""))
@@ -29,33 +29,33 @@ test "Levey-Jennings SVG breaks a line at a missing control observation" {
       epoch,
       sequence: 1L,
       timestamp: "t1",
-      observations: [{ control_level_id: "L1", value: 10000L, precision: 2 }],
+      observations: [{ control_level_id: "L1", value: 10000L, precision: 2, }],
     },
     {
       run_id: "run-2",
       epoch,
       sequence: 2L,
       timestamp: "t2",
-      observations: [{ control_level_id: "L1", value: 10100L, precision: 2 }],
+      observations: [{ control_level_id: "L1", value: 10100L, precision: 2, }],
     },
-    { run_id: "run-3", epoch, sequence: 3L, timestamp: "t3", observations: [] },
+    { run_id: "run-3", epoch, sequence: 3L, timestamp: "t3", observations: [], },
     {
       run_id: "run-4",
       epoch,
       sequence: 4L,
       timestamp: "t4",
-      observations: [{ control_level_id: "L1", value: 9900L, precision: 2 }],
+      observations: [{ control_level_id: "L1", value: 9900L, precision: 2, }],
     },
     {
       run_id: "run-5",
       epoch,
       sequence: 5L,
       timestamp: "t5",
-      observations: [{ control_level_id: "L1", value: 10000L, precision: 2 }],
+      observations: [{ control_level_id: "L1", value: 10000L, precision: 2, }],
     },
   ]
-  let trajectory : @evidence.Trajectory = { assessments: [], input_issues: [] }
-  let svg = render_levey_jennings_svg(program, runs, trajectory)
+  let trajectory : @evidence.Trajectory = { assessments: [], input_issues: [], }
+  let svg = @io.render_levey_jennings_svg(program, runs, trajectory)
   assert_true(svg.contains("data-segment=\"1\""))
   assert_true(svg.contains("data-segment=\"2\""))
   assert_true(!svg.contains("data-segment=\"3\""))

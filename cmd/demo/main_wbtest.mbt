@@ -4,7 +4,7 @@ test "CLI defaults to the stable Markdown scenario" {
     Ok(options) => {
       assert_true(options.scenario == "stable")
       assert_true(options.format == "markdown")
-      assert_true(options.input_path is None)
+      assert_true(options.input_paths.length() == 0)
       assert_true(options.program_path is None)
       assert_true(options.output_path is None)
       assert_true(!options.check_program)
@@ -22,7 +22,7 @@ test "CLI supports text and JSON CSV preflight with a selected program" {
     ]) {
     Ok(options) => {
       assert_true(options.check_input)
-      assert_true(options.input_path == Some("samples.csv"))
+      assert_true(options.input_paths == ["samples.csv"])
       assert_true(options.format == "json")
       assert_true(!options.check_program)
     }
@@ -45,7 +45,7 @@ test "CLI accepts a CSV path and JSON format" {
   match
     parse_cli_args(["--input", "examples/synthetic-iqc.csv", "--format", "json"]) {
     Ok(options) => {
-      assert_true(options.input_path == Some("examples/synthetic-iqc.csv"))
+      assert_true(options.input_paths == ["examples/synthetic-iqc.csv"])
       assert_true(options.format == "json")
     }
     Err(_) => fail("CSV and JSON options should parse")
@@ -100,7 +100,7 @@ test "CLI accepts a program for validation or CSV replay" {
     ]) {
     Ok(options) => {
       assert_true(options.program_path == Some("examples/demo-program.json"))
-      assert_true(options.input_path == Some("examples/synthetic-iqc.csv"))
+      assert_true(options.input_paths == ["examples/synthetic-iqc.csv"])
       assert_true(!options.check_program)
     }
     Err(_) => fail("custom program CSV replay options should parse")
@@ -110,6 +110,14 @@ test "CLI accepts a program for validation or CSV replay" {
 ///|
 test "CLI rejects unknown arguments formats and conflicting inputs" {
   assert_true(parse_cli_args(["--unknown"]) is Err(_))
+  match
+    parse_cli_args([
+      "--input", "first.csv", "--input", "第二 份.csv", "--program", "p.json",
+    ]) {
+    Ok(options) =>
+      assert_true(options.input_paths == ["first.csv", "第二 份.csv"])
+    Err(_) => fail("repeated --input options should preserve argument order")
+  }
   assert_true(parse_cli_args(["--format", "yaml"]) is Err(_))
   assert_true(
     parse_cli_args(["--program", "examples/demo-program.json"]) is Err(_),

@@ -79,6 +79,10 @@ pub using @replay {evaluate_run, replay_track}
 
 ///|
 pub using @io {
+  type QCCsvInput,
+  type SourcedQCRun,
+  type SourcedCsvDiagnostic,
+  type CsvBatchParseDetailedResult,
   type CsvParseResult,
   type CsvDiagnostic,
   type CsvParseDetailedResult,
@@ -86,12 +90,19 @@ pub using @io {
   parse_assay_program_json,
   parse_qc_csv,
   parse_qc_csv_detailed,
+  parse_qc_csv_batch_detailed,
   render_audit_csv,
+  render_audit_csv_batch,
   render_audit_html,
+  render_audit_html_batch,
   render_audit_json,
+  render_audit_json_batch,
   render_audit_manifest,
+  render_audit_manifest_batch,
   render_audit_markdown,
+  render_audit_markdown_batch,
   render_levey_jennings_svg,
+  render_levey_jennings_svg_batch,
   render_trajectory_markdown,
   render_trajectory_json,
 }

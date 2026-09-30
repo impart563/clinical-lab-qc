@@ -16,6 +16,7 @@ pub(all) struct ControlPoint {
   value : Int64
   precision : Int
 } derive(@debug.Debug)
+pub fn ControlPoint::to_repr(Self) -> @debug.Repr
 
 pub(all) struct QCRun {
   run_id : String
@@ -24,6 +25,7 @@ pub(all) struct QCRun {
   timestamp : String
   observations : Array[ControlPoint]
 } derive(@debug.Debug)
+pub fn QCRun::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

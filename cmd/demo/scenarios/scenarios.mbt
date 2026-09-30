@@ -5,8 +5,8 @@ pub fn demo_program() -> @lib.AssayProgram {
     unit: "unit/L",
     precision: 0,
     levels: [
-      { id: "L1", mean: 100L, standard_deviation: 10L, required: true },
-      { id: "L2", mean: 200L, standard_deviation: 20L, required: true },
+      { id: "L1", mean: 100L, standard_deviation: 10L, required: true, },
+      { id: "L2", mean: 200L, standard_deviation: 20L, required: true, },
     ],
     rule_policies: @lib.default_rule_policies(),
   }
@@ -26,8 +26,8 @@ fn make_run(
     sequence,
     timestamp: "2026-09-25T08:00:00Z",
     observations: [
-      { control_level_id: "L1", value: value_l1, precision: 0 },
-      { control_level_id: "L2", value: value_l2, precision: 0 },
+      { control_level_id: "L1", value: value_l1, precision: 0, },
+      { control_level_id: "L2", value: value_l2, precision: 0, },
     ],
   }
 }

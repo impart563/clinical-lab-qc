@@ -2,7 +2,7 @@
 priv struct CliOptions {
   scenario : String
   format : String
-  input_path : String?
+  input_paths : Array[String]
   program_path : String?
   output_path : String?
   bundle_path : String?
@@ -15,7 +15,7 @@ priv struct InputValidation {
   input_runs : Int
   errors : Array[@lib.InputIssue]
   warnings : Array[@lib.InputIssue]
-  csv_diagnostics : Array[@lib.CsvDiagnostic]
+  csv_diagnostics : Array[@lib.SourcedCsvDiagnostic]
 }
 
 ///|
@@ -51,7 +51,11 @@ fn cli_command() -> @argparse.Command {
         default_values=["stable"],
         about="demo scenario: stable, step-shift, or gradual-drift",
       ),
-      @argparse.OptionArg("input", about="path to a long-form QC CSV file"),
+      @argparse.OptionArg(
+        "input",
+        action=@argparse.Append,
+        about="path to a long-form QC CSV file; repeat to replay an ordered batch",
+      ),
       @argparse.OptionArg("output", about="write the report to this file path"),
       @argparse.OptionArg(
         "bundle",
@@ -83,9 +87,9 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
     Some(values) if values.length() == 1 => values[0]
     _ => "markdown"
   }
-  let input_path = match matches.values.get("input") {
-    Some(values) if values.length() == 1 => Some(values[0])
-    _ => None
+  let input_paths = match matches.values.get("input") {
+    Some(values) => values
+    None => []
   }
   let program_path = match matches.values.get("program") {
     Some(values) if values.length() == 1 => Some(values[0])
@@ -101,6 +105,11 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
   }
   let check_program = matches.flags.get("check-program") == Some(true)
   let check_input = matches.flags.get("check-input") == Some(true)
+  for path in input_paths {
+    if path.trim().is_empty() {
+      return Err("--input requires a non-empty file path")
+    }
+  }
   if format != "markdown" &&
     format != "text" &&
     format != "json" &&
@@ -113,11 +122,11 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
       "'; choose markdown, json, csv, svg, or html",
     )
   }
-  if input_path is Some(_) &&
+  if input_paths.length() > 0 &&
     matches.sources.get("scenario") is Some(@argparse.Argv) {
     return Err("choose either --input or --scenario, not both")
   }
-  if input_path is None &&
+  if input_paths.length() == 0 &&
     scenario != "stable" &&
     scenario != "step-shift" &&
     scenario != "gradual-drift" {
@@ -130,10 +139,10 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
   if check_program && program_path is None {
     return Err("--check-program requires --program <path>")
   }
-  if check_program && input_path is Some(_) {
+  if check_program && input_paths.length() > 0 {
     return Err("--check-program cannot be combined with --input")
   }
-  if check_input && input_path is None {
+  if check_input && input_paths.length() == 0 {
     return Err("--check-input requires --input <path>")
   }
   if check_input && check_program {
@@ -145,7 +154,7 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
   if check_input && format != "markdown" && format != "text" && format != "json" {
     return Err("--check-input supports only --format text or --format json")
   }
-  if program_path is Some(_) && input_path is None && !check_program {
+  if program_path is Some(_) && input_paths.length() == 0 && !check_program {
     return Err("--program requires --input or --check-program")
   }
   if check_program && matches.sources.get("scenario") is Some(@argparse.Argv) {
@@ -173,7 +182,7 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
   Ok({
     scenario,
     format,
-    input_path,
+    input_paths,
     program_path,
     output_path,
     bundle_path,
@@ -183,15 +192,18 @@ fn parse_cli_args(args : Array[String]) -> Result[CliOptions, String] {
 }
 
 ///|
-fn csv_issues_message(issues : Array[@lib.InputIssue]) -> String {
+fn csv_issues_message(issues : Array[@lib.SourcedCsvDiagnostic]) -> String {
   let message = StringBuilder()
   message.write_string("CSV input has ")
   message.write_string(issues.length().to_string())
   message.write_string(" issue(s):")
-  for issue in issues {
+  for entry in issues {
+    let issue = entry.diagnostic.issue
     message.write_string("\n- [")
     message.write_string(issue.code.name())
     message.write_string("] ")
+    message.write_string(entry.source_label)
+    message.write_string(": ")
     message.write_string(issue.message)
   }
   message.to_string()
@@ -240,7 +252,9 @@ fn validate_csv_input(
       input_runs: parsed.runs.length(),
       errors,
       warnings,
-      csv_diagnostics: parsed.diagnostics,
+      csv_diagnostics: parsed.diagnostics.map(fn(diagnostic) {
+        { source_label: "", diagnostic, }
+      }),
     }
   }
   let trajectory = @lib.replay_track(program, parsed.runs)
@@ -262,17 +276,19 @@ fn validate_csv_input(
     input_runs: parsed.runs.length(),
     errors,
     warnings,
-    csv_diagnostics: parsed.diagnostics,
+    csv_diagnostics: parsed.diagnostics.map(fn(diagnostic) {
+      { source_label: "", diagnostic, }
+    }),
   }
 }
 
 ///|
 fn find_csv_diagnostic(
-  diagnostics : Array[@lib.CsvDiagnostic],
+  diagnostics : Array[@lib.SourcedCsvDiagnostic],
   issue : @lib.InputIssue,
-) -> @lib.CsvDiagnostic? {
+) -> @lib.SourcedCsvDiagnostic? {
   for diagnostic in diagnostics {
-    let candidate = diagnostic.issue
+    let candidate = diagnostic.diagnostic.issue
     if candidate.code == issue.code &&
       candidate.run_id == issue.run_id &&
       candidate.message == issue.message {
@@ -294,7 +310,7 @@ fn json_optional_int(value : Int?) -> Json {
 fn json_validation_issue(
   issue : @lib.InputIssue,
   severity : String,
-  diagnostics : Array[@lib.CsvDiagnostic],
+  diagnostics : Array[@lib.SourcedCsvDiagnostic],
 ) -> Json {
   let fields : Map[String, Json] = Map([])
   fields["severity"] = Json::string(severity)
@@ -305,13 +321,17 @@ fn json_validation_issue(
   }
   fields["message"] = Json::string(issue.message)
   fields["location"] = match find_csv_diagnostic(diagnostics, issue) {
-    Some(diagnostic) => {
+    Some(entry) => {
+      let diagnostic = entry.diagnostic
       let location : Map[String, Json] = Map([])
       location["line"] = json_optional_int(diagnostic.line)
       location["column"] = json_optional_int(diagnostic.column)
       location["field"] = match diagnostic.field {
         Some(name) => Json::string(name)
         None => Json::null()
+      }
+      if !entry.source_label.is_empty() {
+        location["source_file"] = Json::string(entry.source_label)
       }
       Json::object(location)
     }
@@ -349,11 +369,19 @@ fn append_validation_issues(
   output : StringBuilder,
   label : String,
   issues : Array[@lib.InputIssue],
+  diagnostics : Array[@lib.SourcedCsvDiagnostic],
 ) -> Unit {
   for issue in issues {
     output.write_string("\n- [")
     output.write_string(label)
     output.write_string(": ")
+    match find_csv_diagnostic(diagnostics, issue) {
+      Some(entry) if !entry.source_label.is_empty() => {
+        output.write_string(entry.source_label)
+        output.write_string(": ")
+      }
+      _ => ()
+    }
     output.write_string(issue.code.name())
     output.write_string("] ")
     match issue.run_id {
@@ -384,8 +412,18 @@ fn input_validation_text(validation : InputValidation) -> String {
   output.write_string(validation.errors.length().to_string())
   output.write_string("\nWarnings: ")
   output.write_string(validation.warnings.length().to_string())
-  append_validation_issues(output, "error", validation.errors)
-  append_validation_issues(output, "warning", validation.warnings)
+  append_validation_issues(
+    output,
+    "error",
+    validation.errors,
+    validation.csv_diagnostics,
+  )
+  append_validation_issues(
+    output,
+    "warning",
+    validation.warnings,
+    validation.csv_diagnostics,
+  )
   output.write_string(
     "\nQC rule signals are not used to decide input validity. This preflight does not authorize result release.",
   )
@@ -416,17 +454,41 @@ async fn write_review_bundle(
   program : @lib.AssayProgram,
   runs : Array[@lib.QCRun],
   trajectory : @lib.Trajectory,
+  sourced_runs : Array[@lib.SourcedQCRun]?,
 ) -> Unit {
   @fs.mkdir(directory, recursive=true) catch {
     _ => ()
   }
-  let artifacts = [
-    ("report.html", @lib.render_audit_html(program, runs, trajectory)),
-    ("audit.json", @lib.render_audit_json(program, runs, trajectory)),
-    ("audit.csv", @lib.render_audit_csv(program, runs, trajectory)),
-    ("chart.svg", @lib.render_levey_jennings_svg(program, runs, trajectory)),
-    ("manifest.json", @lib.render_audit_manifest(program, runs, trajectory)),
-  ]
+  let artifacts = match sourced_runs {
+    Some(values) =>
+      [
+        (
+          "report.html",
+          @lib.render_audit_html_batch(program, values, trajectory),
+        ),
+        (
+          "audit.json",
+          @lib.render_audit_json_batch(program, values, trajectory),
+        ),
+        ("audit.csv", @lib.render_audit_csv_batch(program, values, trajectory)),
+        (
+          "chart.svg",
+          @lib.render_levey_jennings_svg_batch(program, values, trajectory),
+        ),
+        (
+          "manifest.json",
+          @lib.render_audit_manifest_batch(program, values, trajectory),
+        ),
+      ]
+    None =>
+      [
+        ("report.html", @lib.render_audit_html(program, runs, trajectory)),
+        ("audit.json", @lib.render_audit_json(program, runs, trajectory)),
+        ("audit.csv", @lib.render_audit_csv(program, runs, trajectory)),
+        ("chart.svg", @lib.render_levey_jennings_svg(program, runs, trajectory)),
+        ("manifest.json", @lib.render_audit_manifest(program, runs, trajectory)),
+      ]
+  }
   for index in 0..<artifacts.length() {
     let (name, content) = artifacts[index]
     let path = directory + "/" + name
@@ -440,6 +502,58 @@ async fn write_review_bundle(
     }
   }
   println("Review bundle written to '" + directory + "'")
+}
+
+///|
+fn input_display_label(path : String) -> String {
+  let normalized = path.replace_all(old="\\", new="/")
+  let parts = normalized.split("/").collect()
+  match parts.get(parts.length() - 1) {
+    Some(value) => value.to_owned()
+    None => "input"
+  }
+}
+
+///|
+async fn read_csv_inputs(
+  paths : Array[String],
+) -> (Array[@lib.QCCsvInput], Array[String]) {
+  let inputs : Array[@lib.QCCsvInput] = []
+  let errors : Array[String] = []
+  for path in paths {
+    let label = input_display_label(path)
+    let text : String? = Some(@fs.read_file(path).text()) catch { _ => None }
+    match text {
+      Some(value) => inputs.push({ label, text: value, })
+      None => errors.push("unable to read CSV file '" + label + "'")
+    }
+  }
+  (inputs, errors)
+}
+
+///|
+fn input_batch_error_message(
+  read_errors : Array[String],
+  diagnostics : Array[@lib.SourcedCsvDiagnostic],
+) -> String {
+  let output = StringBuilder()
+  let count = read_errors.length() + diagnostics.length()
+  output.write_string("QC batch input has ")
+  output.write_string(count.to_string())
+  output.write_string(" error(s):")
+  for error in read_errors {
+    output.write_string("\n- ")
+    output.write_string(error)
+  }
+  if diagnostics.length() > 0 {
+    let formatted = csv_issues_message(diagnostics)
+    let lines = formatted.split("\n").collect()
+    for line in lines[1:] {
+      output.write_char('\n')
+      output.write_string(line.to_owned())
+    }
+  }
+  output.to_string()
 }
 
 ///|
@@ -497,15 +611,28 @@ async fn main {
     return
   }
   if options.check_input {
-    let path = match options.input_path {
-      Some(value) => value
-      None => cli_error("--check-input requires --input <path>")
+    let (inputs, read_errors) = read_csv_inputs(options.input_paths)
+    let parsed = @lib.parse_qc_csv_batch_detailed(program, inputs)
+    if read_errors.length() > 0 {
+      cli_error(input_batch_error_message(read_errors, parsed.diagnostics))
     }
-    let csv_text = @fs.read_file(path).text() catch {
-      _ => cli_error("unable to read CSV file '" + path + "'")
+    let validation = if parsed.diagnostics.length() > 0 {
+      {
+        input_runs: 0,
+        errors: parsed.diagnostics.map(fn(entry) { entry.diagnostic.issue }),
+        warnings: [],
+        csv_diagnostics: if options.input_paths.length() > 1 {
+          parsed.diagnostics
+        } else {
+          parsed.diagnostics.map(fn(entry) {
+            { source_label: "", diagnostic: entry.diagnostic, }
+          })
+        },
+      }
+    } else {
+      let runs = parsed.runs.map(fn(entry) { entry.run })
+      validate_csv_input(program, { runs, diagnostics: [], })
     }
-    let parsed = @lib.parse_qc_csv_detailed(program, csv_text)
-    let validation = validate_csv_input(program, parsed)
     let output = if options.format == "json" {
       input_validation_json(validation)
     } else {
@@ -517,37 +644,44 @@ async fn main {
     }
     return
   }
-  let runs = match options.input_path {
-    Some(path) => {
-      let csv_text = @fs.read_file(path).text() catch {
-        _ => cli_error("unable to read CSV file '" + path + "'")
-      }
-      let parsed = @lib.parse_qc_csv_detailed(program, csv_text)
-      if parsed.diagnostics.length() > 0 {
-        cli_error(
-          csv_issues_message(
-            parsed.diagnostics.map(fn(diagnostic) { diagnostic.issue }),
-          ),
-        )
-      }
-      parsed.runs
+  let (runs, sourced_runs) = if options.input_paths.length() > 0 {
+    let (inputs, read_errors) = read_csv_inputs(options.input_paths)
+    let parsed = @lib.parse_qc_csv_batch_detailed(program, inputs)
+    if read_errors.length() > 0 || parsed.diagnostics.length() > 0 {
+      cli_error(input_batch_error_message(read_errors, parsed.diagnostics))
     }
-    None =>
-      match @scenarios.build_scenario(options.scenario) {
-        Some(value) => value
-        None => cli_error("unknown scenario '" + options.scenario + "'")
-      }
+    let sourced = parsed.runs
+    (sourced.map(fn(entry) { entry.run }), Some(sourced))
+  } else {
+    let runs = match @scenarios.build_scenario(options.scenario) {
+      Some(value) => value
+      None => cli_error("unknown scenario '" + options.scenario + "'")
+    }
+    (runs, None)
   }
   let trajectory = @lib.replay_track(program, runs)
   match options.bundle_path {
-    Some(directory) => write_review_bundle(directory, program, runs, trajectory)
+    Some(directory) =>
+      write_review_bundle(directory, program, runs, trajectory, sourced_runs)
     None => {
-      let output = match options.format {
-        "json" => @lib.render_audit_json(program, runs, trajectory)
-        "csv" => @lib.render_audit_csv(program, runs, trajectory)
-        "svg" => @lib.render_levey_jennings_svg(program, runs, trajectory)
-        "html" => @lib.render_audit_html(program, runs, trajectory)
-        _ => @lib.render_audit_markdown(program, runs, trajectory)
+      let output = match sourced_runs {
+        Some(sourced) =>
+          match options.format {
+            "json" => @lib.render_audit_json_batch(program, sourced, trajectory)
+            "csv" => @lib.render_audit_csv_batch(program, sourced, trajectory)
+            "svg" =>
+              @lib.render_levey_jennings_svg_batch(program, sourced, trajectory)
+            "html" => @lib.render_audit_html_batch(program, sourced, trajectory)
+            _ => @lib.render_audit_markdown_batch(program, sourced, trajectory)
+          }
+        None =>
+          match options.format {
+            "json" => @lib.render_audit_json(program, runs, trajectory)
+            "csv" => @lib.render_audit_csv(program, runs, trajectory)
+            "svg" => @lib.render_levey_jennings_svg(program, runs, trajectory)
+            "html" => @lib.render_audit_html(program, runs, trajectory)
+            _ => @lib.render_audit_markdown(program, runs, trajectory)
+          }
       }
       emit_report(options.output_path, output)
     }

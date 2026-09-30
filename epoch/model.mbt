@@ -8,6 +8,9 @@ pub(all) struct QCEpoch {
 } derive(Debug)
 
 ///|
+pub extend QCEpoch with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
 pub fn QCEpoch::has_same_metadata(self : QCEpoch, other : QCEpoch) -> Bool {
   self.id == other.id &&
   self.reagent_lot == other.reagent_lot &&

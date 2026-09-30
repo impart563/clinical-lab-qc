@@ -13,19 +13,33 @@ pub fn parse_assay_program_json(String) -> ProgramConfigResult
 
 pub fn parse_qc_csv(@assay.AssayProgram, String) -> CsvParseResult
 
+pub fn parse_qc_csv_batch_detailed(@assay.AssayProgram, Array[QCCsvInput]) -> CsvBatchParseDetailedResult
+
 pub fn parse_qc_csv_detailed(@assay.AssayProgram, String) -> CsvParseDetailedResult
 
 pub fn render_audit_csv(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
+pub fn render_audit_csv_batch(@assay.AssayProgram, Array[SourcedQCRun], @evidence.Trajectory) -> String
+
 pub fn render_audit_html(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
+
+pub fn render_audit_html_batch(@assay.AssayProgram, Array[SourcedQCRun], @evidence.Trajectory) -> String
 
 pub fn render_audit_json(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
+pub fn render_audit_json_batch(@assay.AssayProgram, Array[SourcedQCRun], @evidence.Trajectory) -> String
+
 pub fn render_audit_manifest(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
+
+pub fn render_audit_manifest_batch(@assay.AssayProgram, Array[SourcedQCRun], @evidence.Trajectory) -> String
 
 pub fn render_audit_markdown(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
 
+pub fn render_audit_markdown_batch(@assay.AssayProgram, Array[SourcedQCRun], @evidence.Trajectory) -> String
+
 pub fn render_levey_jennings_svg(@assay.AssayProgram, Array[@run.QCRun], @evidence.Trajectory) -> String
+
+pub fn render_levey_jennings_svg_batch(@assay.AssayProgram, Array[SourcedQCRun], @evidence.Trajectory) -> String
 
 pub fn render_trajectory_json(@evidence.Trajectory) -> String
 
@@ -34,27 +48,55 @@ pub fn render_trajectory_markdown(@evidence.Trajectory) -> String
 // Errors
 
 // Types and methods
+pub(all) struct CsvBatchParseDetailedResult {
+  runs : Array[SourcedQCRun]
+  diagnostics : Array[SourcedCsvDiagnostic]
+} derive(@debug.Debug)
+pub fn CsvBatchParseDetailedResult::to_repr(Self) -> @debug.Repr
+
 pub(all) struct CsvDiagnostic {
   issue : @evidence.InputIssue
   line : Int?
   column : Int?
   field : String?
 } derive(@debug.Debug)
+pub fn CsvDiagnostic::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CsvParseDetailedResult {
   runs : Array[@run.QCRun]
   diagnostics : Array[CsvDiagnostic]
 } derive(@debug.Debug)
+pub fn CsvParseDetailedResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CsvParseResult {
   runs : Array[@run.QCRun]
   issues : Array[@evidence.InputIssue]
 } derive(@debug.Debug)
+pub fn CsvParseResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ProgramConfigResult {
   program : @assay.AssayProgram?
   issues : Array[String]
 } derive(@debug.Debug)
+pub fn ProgramConfigResult::to_repr(Self) -> @debug.Repr
+
+pub(all) struct QCCsvInput {
+  label : String
+  text : String
+} derive(@debug.Debug)
+pub fn QCCsvInput::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SourcedCsvDiagnostic {
+  source_label : String
+  diagnostic : CsvDiagnostic
+} derive(@debug.Debug)
+pub fn SourcedCsvDiagnostic::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SourcedQCRun {
+  source_label : String
+  run : @run.QCRun
+} derive(@debug.Debug)
+pub fn SourcedQCRun::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

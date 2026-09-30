@@ -23,23 +23,24 @@ moon run --target native cmd/demo -- --check-input --input examples/synthetic-iq
 moon run --target native cmd/demo -- --check-input --input examples/synthetic-iqc.csv --program examples/demo-program.json --format json
 moon run --target native cmd/demo -- --program examples/demo-program.json --check-program
 moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/synthetic-iqc.csv --format json
+moon run --target native cmd/demo -- --program examples/demo-program.json --input examples/daily-qc-2026-09-28.csv --input examples/daily-qc-2026-09-29.csv --input examples/daily-qc-2026-09-30.csv --format json
 moon run --target native examples/quickstart
 moon -C examples/downstream-consumer run --target native .
 python scripts/acceptance.py
 ```
 
-The default Markdown output starts with track totals and then lists each run, triggered rule, evidence point, comparison distance, and input issue. JSON output is a deterministic `schema_version: 1` audit envelope with the program, original runs and observations, epoch snapshots, assessments, issues, and summary counts, including status counts by epoch, rule-hit counts by control level, and control-observation coverage. CSV output is a detail table with typed `assessment`, `observation`, `evidence`, `input_issue`, and `track_issue` rows; scaled measurement columns remain integer strings and include their precision.
+The default Markdown output starts with track totals and then lists each run, triggered rule, evidence point, comparison distance, and input issue. Single-file JSON output remains a deterministic `schema_version: 1` audit envelope. Batch JSON uses `schema_version: 2` and adds a sanitized `source_label` to every run; batch CSV adds a `source_label` column, while Markdown, HTML, SVG metadata, and the bundle manifest retain the run-to-file source map. CSV output is a detail table with typed `assessment`, `observation`, `evidence`, `input_issue`, and `track_issue` rows; scaled measurement columns remain integer strings and include their precision.
 
 - `stable` shows a stable synthetic track without rule hits.
 - `step-shift` shows two QC epochs. The new lot and calibration start fresh rule windows.
 - `gradual-drift` shows consecutive-run signals and the points that support them.
-- `--input` replays a long-form CSV using the demo assay program. CSV files with parse issues fail with a nonzero process status.
+- `--input` replays a long-form CSV using the demo assay program. Repeat `--input <path>` to process several files as one ordered track with a separate header per file; file order is preserved. The CLI attempts every file, reports read and parse failures together, and returns no QC report if any source is invalid. Reports include each run's source filename, never its absolute path.
 - `--program` loads a custom assay profile from versioned JSON; combine it with `--input` to replay the CSV using that profile. `--check-program` validates a profile without replaying data.
-- `--check-input` validates CSV parsing and run/epoch track integrity without producing a QC assessment report. It accepts an optional `--program`; the default text report or `--format json` returns diagnostics. JSON diagnostics include stable issue codes, severity, and a structured `location` (`line`, `column`, and `field`) for CSV parse problems. Track-integrity issues have `location: null`. Syntax and track errors fail with exit code 2; missing required controls are reported as warnings. QC rule signals do not decide input validity.
+- `--check-input` validates one or more CSV files and run/epoch track integrity without producing a QC assessment report. It accepts an optional `--program`; the default text report or `--format json` returns diagnostics. JSON diagnostics include stable issue codes, severity, and a structured `location` (`line`, `column`, `field`, and, for batch parse errors, `source_file`). Track-integrity issues have `location: null`. Syntax and track errors fail with exit code 2; missing required controls are reported as warnings. QC rule signals do not decide input validity.
 - `--format csv` exports the audit details as a result table; `--format json` includes status, rule-hit, and epoch-run summaries.
 - `--format html` writes a single offline review report with the assay configuration, status and rule summaries, epoch metadata, control-observation coverage, an embedded Levey–Jennings SVG, and expandable per-run observations and evidence. Status cards, epoch rows, rule summaries, and coverage gaps link directly to matching runs. It has no scripts or external assets; open the saved `.html` file in a browser.
 - `--output <path>` writes the selected report format directly to a file, replacing an existing file; without it, reports go to standard output. The output parent directory must already exist. Write failures return a clear error and nonzero exit status.
-- `--bundle <directory>` creates an offline review package containing `report.html`, `audit.json`, `audit.csv`, `chart.svg`, and `manifest.json`. The manifest records schema versions, relative artifact paths, run/epoch totals, status counts, and control-observation coverage; it omits source paths and timestamps so identical input produces identical files. Existing files in the selected directory are replaced.
+- `--bundle <directory>` creates an offline review package containing `report.html`, `audit.json`, `audit.csv`, `chart.svg`, and `manifest.json`. The manifest records schema versions, relative artifact paths, run/epoch totals, status counts, control-observation coverage, and (for batch inputs) display filenames; it omits source paths and timestamps so identical input produces identical files. Existing files in the selected directory are replaced.
 - `examples/quickstart` is a small downstream-style program that constructs the public API types, replays data, and renders Markdown and SVG through the root package.
 - `examples/downstream-consumer` is a separate MoonBit module that consumes the public API through a local workspace dependency. It smoke-tests package boundaries before a registry release; after publication, the versioned registry dependency should also be checked.
 
@@ -47,7 +48,7 @@ Assay profile JSON uses `schema_version: 1`; unknown fields are rejected. Contro
 
 ## Public API
 
-The root package exports `validate_program`, `parse_assay_program_json`, `parse_qc_csv`, `parse_qc_csv_detailed`, `evaluate_run`, `replay_track`, the report renderers, and the domain types `AssayProgram`, `QCEpoch`, `QCRun`, `ControlPoint`, `RuleHit`, `RunAssessment`, and `Trajectory`. `parse_qc_csv_detailed` returns the same parsed runs with diagnostics that expose the issue, physical line, column, and field as typed values.
+The root package exports `validate_program`, `parse_assay_program_json`, `parse_qc_csv`, `parse_qc_csv_detailed`, `parse_qc_csv_batch_detailed`, `evaluate_run`, `replay_track`, the report renderers, and the domain types `AssayProgram`, `QCEpoch`, `QCRun`, `ControlPoint`, `RuleHit`, `RunAssessment`, and `Trajectory`. `parse_qc_csv_detailed` returns the same parsed runs with diagnostics that expose the issue, physical line, column, and field as typed values. `parse_qc_csv_batch_detailed` accepts an ordered array of `{ label, text }` inputs and returns source-tagged runs and diagnostics; if any file has a CSV error, its `runs` array is empty to prevent partial replay. The batch renderers accept those sourced runs and a single trajectory.
 
 The compiled [quickstart example](examples/quickstart/main.mbt) shows the complete API path: configure an assay and QC epoch, construct ordered runs, replay them, and render a report. Exact rule windows and implementation limits are documented in [Rule semantics](docs/rule-semantics.md).
 
@@ -67,7 +68,7 @@ Rule thresholds are strict: equality does not trigger. `2_2s` and `4_1s` require
 
 ## CSV input
 
-`parse_qc_csv(program, text)` accepts a long-form CSV with one control observation per row and this exact header order:
+`parse_qc_csv(program, text)` accepts a long-form CSV with one control observation per row and this exact header order. `parse_qc_csv_batch_detailed(program, inputs)` accepts the same header independently in each source and preserves the caller's input order:
 
 ```csv
 epoch_id,reagent_lot,control_lot,calibration_id,program_version,run_id,sequence,timestamp,control_level_id,value
@@ -91,7 +92,7 @@ python scripts/acceptance.py
 
 `python scripts/acceptance.py` runs the same all-target checks, build, tests, public quickstart, separate downstream-consumer smoke test, deterministic scenario checks, cross-format consistency checks, CLI error cases, and package build locally. CI invokes this script and records the installed MoonBit CLI version in its log.
 
-Acceptance also checks structured CSV locations, epoch status and rule-hit summaries, per-epoch/control rule attribution, per-control observation coverage, missing-value navigation, and byte-for-byte deterministic review bundles.
+Acceptance also checks cold-start dependency resolution through `moon update`, structured CSV locations, epoch status and rule-hit summaries, per-epoch/control rule attribution, per-control observation coverage, missing-value navigation, and byte-for-byte deterministic single-file and multi-file review bundles. The multi-file fixture contains three synthetic daily exports with 10 runs and two control levels per file, a rule window that crosses a file boundary, and a lot/calibration epoch transition; it contains no real lab or patient data.
 
 The tests cover strict threshold boundaries, all six rules, stage isolation, missing-value window resets, input validation, overflow reporting, CSV parsing and escaping, stable versioned reports and charts, offline HTML escaping and determinism, chart gaps and epoch markers, exact demo outcomes, and all public report renderers.
 

@@ -1,3 +1,4 @@
 import {
   "impart563/clinical-lab-qc/epoch",
+  "moonbitlang/core/debug",
 }

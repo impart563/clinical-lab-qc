@@ -24,6 +24,60 @@ pub(all) struct CsvParseDetailedResult {
 } derive(Debug)
 
 ///|
+/// One in-memory CSV source for an ordered batch replay. `label` is a caller-
+/// supplied display name, not a file-system path.
+pub(all) struct QCCsvInput {
+  label : String
+  text : String
+} derive(Debug)
+
+///|
+/// A parsed run associated with the display label of its source CSV.
+pub(all) struct SourcedQCRun {
+  source_label : String
+  run : @run.QCRun
+} derive(Debug)
+
+///|
+/// A CSV diagnostic associated with the display label of its source CSV.
+pub(all) struct SourcedCsvDiagnostic {
+  source_label : String
+  diagnostic : CsvDiagnostic
+} derive(Debug)
+
+///|
+/// Detailed result from ordered, multi-source CSV parsing. If any source has
+/// CSV diagnostics, `runs` is empty so callers cannot accidentally replay a
+/// partial batch.
+pub(all) struct CsvBatchParseDetailedResult {
+  runs : Array[SourcedQCRun]
+  diagnostics : Array[SourcedCsvDiagnostic]
+} derive(Debug)
+
+///|
+pub extend CsvParseResult with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend CsvDiagnostic with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend CsvParseDetailedResult with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend QCCsvInput with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend SourcedQCRun with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend SourcedCsvDiagnostic with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend CsvBatchParseDetailedResult with @moonbitlang/core/debug.Debug::{
+  to_repr,
+}
+
+///|
 priv struct CsvTable {
   rows : Array[Array[String]]
   row_lines : Array[Int]
@@ -168,7 +222,7 @@ fn parse_csv_table(text : String) -> CsvTable {
       row_lines.push(row_start_line)
     }
   }
-  { rows, row_lines, error, error_line, error_column }
+  { rows, row_lines, error, error_line, error_column, }
 }
 
 ///|
@@ -288,7 +342,7 @@ fn csv_issue(
   run_id : String?,
   message : String,
 ) -> @evidence.InputIssue {
-  { code, run_id, message }
+  { code, run_id, message, }
 }
 
 ///|
@@ -300,7 +354,7 @@ fn csv_diagnostic(
   column : Int?,
   field : String?,
 ) -> CsvDiagnostic {
-  { issue: csv_issue(code, run_id, message), line, column, field }
+  { issue: csv_issue(code, run_id, message), line, column, field, }
 }
 
 ///|
@@ -351,7 +405,7 @@ pub fn parse_qc_csv_detailed(
           None,
         ),
       )
-      return { runs: [], diagnostics }
+      return { runs: [], diagnostics, }
     }
     None => ()
   }
@@ -370,7 +424,7 @@ pub fn parse_qc_csv_detailed(
         None,
       ),
     )
-    return { runs: [], diagnostics }
+    return { runs: [], diagnostics, }
   }
   let records : Array[CsvRecord] = []
   for row_index in 1..<table.rows.length() {
@@ -582,5 +636,36 @@ pub fn parse_qc_csv_detailed(
     })
     index = next_index
   }
-  { runs, diagnostics }
+  { runs, diagnostics, }
+}
+
+///|
+/// Parse multiple long-form QC CSV inputs in their supplied order. Each file
+/// has its own header. The result is atomic: when any input has CSV
+/// diagnostics, no parsed runs are returned for replay.
+pub fn parse_qc_csv_batch_detailed(
+  program : @assay.AssayProgram,
+  inputs : Array[QCCsvInput],
+) -> CsvBatchParseDetailedResult {
+  let runs : Array[SourcedQCRun] = []
+  let diagnostics : Array[SourcedCsvDiagnostic] = []
+  for index, input in inputs {
+    let parsed = parse_qc_csv_detailed(program, input.text)
+    let label = if input.label.trim().is_empty() {
+      "input-" + (index + 1).to_string()
+    } else {
+      input.label
+    }
+    for diagnostic in parsed.diagnostics {
+      diagnostics.push({ source_label: label, diagnostic, })
+    }
+    for run in parsed.runs {
+      runs.push({ source_label: label, run, })
+    }
+  }
+  if diagnostics.length() > 0 {
+    { runs: [], diagnostics, }
+  } else {
+    { runs, diagnostics, }
+  }
 }

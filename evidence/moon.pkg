@@ -1,3 +1,4 @@
 import {
   "impart563/clinical-lab-qc/assay",
+  "moonbitlang/core/debug",
 }
